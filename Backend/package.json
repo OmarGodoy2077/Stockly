@@ -1,0 +1,62 @@
+{
+  "name": "stockly-backend",
+  "version": "1.0.0",
+  "description": "Backend SaaS para gestión de inventario con ventas, garantías y servicio técnico",
+  "main": "src/server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "lint": "echo 'No linting configured yet'",
+    "test": "echo 'No tests configured yet'"
+  },
+  "keywords": [
+    "saas",
+    "inventory",
+    "warranty",
+    "service",
+    "ocr",
+    "cloudinary",
+    "supabase",
+    "postgresql",
+    "nodejs",
+    "express"
+  ],
+  "author": "Stockly Team",
+  "license": "Proprietary",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^2.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.0-rc.4",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
+    "tesseract.js": "^5.1.1",
+    "winston": "^3.15.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  },
+  "overrides": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.5",
+    "inflight": "npm:lru-cache@^10.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stockly/backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stockly/backend/issues"
+  },
+  "homepage": "https://github.com/stockly/backend#readme"
+}
