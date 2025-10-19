@@ -5,7 +5,7 @@ import { z } from 'zod';
  */
 
 // Base product schema
-export const productBaseSchema = z.object({
+const productBaseSchema = z.object({
     sku: z.string()
         .min(1, 'SKU es requerido')
         .max(100, 'SKU no puede exceder 100 caracteres')
@@ -49,10 +49,10 @@ export const productBaseSchema = z.object({
 });
 
 // Create product schema
-export const createProductSchema = productBaseSchema;
+const createProductSchema = productBaseSchema;
 
 // Update product schema (all fields optional except id)
-export const updateProductSchema = z.object({
+const updateProductSchema = z.object({
     category_id: z.string().uuid('ID de categoría inválido').optional(),
     sku: z.string()
         .min(1, 'SKU es requerido')
@@ -91,7 +91,7 @@ export const updateProductSchema = z.object({
 });
 
 // Update stock schema
-export const updateStockSchema = z.object({
+const updateStockSchema = z.object({
     stock: z.number()
         .int('Stock debe ser un número entero')
         .min(0, 'Stock debe ser mayor o igual a 0')
@@ -102,7 +102,7 @@ export const updateStockSchema = z.object({
 });
 
 // Query parameters schema
-export const productQuerySchema = z.object({
+const productQuerySchema = z.object({
     page: z.string()
         .regex(/^\d+$/, 'Página debe ser un número')
         .transform(val => parseInt(val))
@@ -137,7 +137,7 @@ export const productQuerySchema = z.object({
 });
 
 // Bulk update schema
-export const bulkUpdateProductSchema = z.object({
+const bulkUpdateProductSchema = z.object({
     products: z.array(z.object({
         id: z.string().uuid('ID de producto inválido'),
         updates: updateProductSchema
@@ -157,6 +157,7 @@ export const schemas = {
 
 // Export individual schemas for direct use
 export {
+    productBaseSchema,
     createProductSchema,
     updateProductSchema,
     updateStockSchema,

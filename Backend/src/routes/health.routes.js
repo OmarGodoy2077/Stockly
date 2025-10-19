@@ -1,6 +1,6 @@
 import express from 'express';
 import { database } from '../config/database.js';
-import { firebaseConfig } from '../config/firebase.js';
+import { cloudinaryConfig } from '../config/cloudinary.js';
 import { tesseractConfig } from '../config/tesseract.js';
 import { logger } from '../config/logger.js';
 import ResponseHandler from '../utils/responseHandler.js';
@@ -18,8 +18,8 @@ router.get('/', async (req, res) => {
         // Check database health
         const dbHealth = await database.healthCheck();
 
-        // Check Firebase health
-        const firebaseHealth = await firebaseConfig.healthCheck();
+        // Check Cloudinary health
+        const cloudinaryHealth = await cloudinaryConfig.healthCheck();
 
         // Check OCR health
         const ocrHealth = await tesseractConfig.healthCheck();
@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
 
         // Overall health status
         const overallStatus = dbHealth.status === 'healthy' &&
-                             firebaseHealth.status === 'healthy' &&
+                             cloudinaryHealth.status === 'healthy' &&
                              ocrHealth.status === 'healthy' ? 'healthy' : 'unhealthy';
 
         const healthCheck = {
@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
             environment: process.env.NODE_ENV || 'development',
             services: {
                 database: dbHealth,
-                firebase: firebaseHealth,
+                cloudinary: cloudinaryHealth,
                 ocr: ocrHealth
             },
             system: {
@@ -93,11 +93,10 @@ router.get('/detailed', async (req, res) => {
         const startTime = Date.now();
 
         // Database detailed check
-        const dbStats = database.getPoolStats();
-        const dbQueryResult = await database.query('SELECT 1 as test');
+        const dbHealth = await database.healthCheck();
 
-        // Firebase detailed check
-        const firebaseFiles = await firebaseConfig.listFiles('', 5);
+        // Cloudinary health check
+        const cloudinaryHealth = await cloudinaryConfig.healthCheck();
 
         // OCR detailed check
         const ocrStatus = tesseractConfig.getStatus();
@@ -109,15 +108,10 @@ router.get('/detailed', async (req, res) => {
             timestamp: new Date().toISOString(),
             response_time: `${responseTime}ms`,
             services: {
-                database: {
-                    status: 'healthy',
-                    pool: dbStats,
-                    test_query: dbQueryResult.rows[0]?.test === 1 ? 'success' : 'failed'
-                },
-                firebase: {
-                    status: 'healthy',
-                    bucket: firebaseConfig.getBucket().name,
-                    sample_files: firebaseFiles.length
+                database: dbHealth,
+                cloudinary: {
+                    status: cloudinaryHealth.status,
+                    cloudName: cloudinaryHealth.cloudName
                 },
                 ocr: {
                     status: ocrStatus.initialized ? 'healthy' : 'unhealthy',
@@ -146,9 +140,9 @@ router.get('/ready', async (req, res) => {
     try {
         // Simple readiness check
         const dbHealth = await database.healthCheck();
-        const firebaseHealth = await firebaseConfig.healthCheck();
+        const cloudinaryHealth = await cloudinaryConfig.healthCheck();
 
-        const ready = dbHealth.status === 'healthy' && firebaseHealth.status === 'healthy';
+        const ready = dbHealth.status === 'healthy' && cloudinaryHealth.status === 'healthy';
 
         if (ready) {
             ResponseHandler.success(res, {
@@ -159,7 +153,7 @@ router.get('/ready', async (req, res) => {
             ResponseHandler.error(res, 'Service not ready', 503, {
                 ready: false,
                 database: dbHealth.status,
-                firebase: firebaseHealth.status
+                cloudinary: cloudinaryHealth.status
             });
         }
 

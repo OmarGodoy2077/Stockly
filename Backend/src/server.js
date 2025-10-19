@@ -220,24 +220,29 @@ class StocklyServer {
             logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
             // Stop accepting new connections
-            this.server.close(async () => {
-                logger.info('HTTP server closed');
+            if (this.server) {
+                this.server.close(async () => {
+                    logger.info('HTTP server closed');
 
-                try {
-                    // Close database connections
-                    await database.close();
+                    try {
+                        // Close database connections
+                        await database.close();
 
-                    // Terminate OCR worker
-                    await tesseractConfig.terminate();
+                        // Terminate OCR worker
+                        await tesseractConfig.terminate();
 
-                    logger.info('Graceful shutdown completed');
-                    process.exit(0);
+                        logger.info('Graceful shutdown completed');
+                        process.exit(0);
 
-                } catch (error) {
-                    logger.error('Error during graceful shutdown:', error);
-                    process.exit(1);
-                }
-            });
+                    } catch (error) {
+                        logger.error('Error during graceful shutdown:', error);
+                        process.exit(1);
+                    }
+                });
+            } else {
+                logger.info('Server not started yet, shutting down immediately');
+                process.exit(0);
+            }
 
             // Force close after 30 seconds
             setTimeout(() => {

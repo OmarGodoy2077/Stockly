@@ -1,4 +1,4 @@
-import Tesseract from 'tesseract.js';
+import { createWorker } from 'tesseract.js';
 import dotenv from 'dotenv';
 import { logger } from './logger.js';
 
@@ -27,39 +27,19 @@ class TesseractConfig {
                 await this.worker.terminate();
             }
 
-            // Create new worker
-            this.worker = await Tesseract.createWorker(this.defaultLang);
-
-            // Load additional languages if specified
-            if (this.defaultLang.includes('+')) {
-                const languages = this.defaultLang.split('+');
-                for (let i = 1; i < languages.length; i++) {
-                    try {
-                        await this.worker.loadLanguage(languages[i]);
-                    } catch (error) {
-                        logger.warn(`Failed to load language: ${languages[i]}`, {
-                            error: error.message
-                        });
-                    }
-                }
-
-                // Set parameters for multiple languages
-                await this.worker.setParameters({
+            // Create new worker with language and initial config
+            this.worker = await createWorker(this.defaultLang, {
+                config: {
                     tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
                     tessedit_ocr_engine_mode: '2', // Use LSTM OCR engine
                     preserve_interword_spaces: '1'
-                });
-            }
+                }
+            });
 
-            // Initialize worker
-            await this.worker.initialize(this.defaultLang);
-
-            // Set OCR parameters for better accuracy
+            // Set additional OCR parameters that can be changed after initialization
             await this.worker.setParameters({
                 tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-./',
                 tessedit_pageseg_mode: '1', // Automatic page segmentation
-                tessedit_ocr_engine_mode: '2', // Use LSTM OCR engine
-                preserve_interword_spaces: '1',
                 tessedit_do_invert: '0', // Don't invert image
                 classify_enable_learning: '0', // Disable learning for consistency
                 classify_enable_adaptive_matcher: '0'
