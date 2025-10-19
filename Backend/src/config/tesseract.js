@@ -11,7 +11,7 @@ dotenv.config();
  */
 class TesseractConfig {
     constructor() {
-        this.defaultLang = process.env.TESSEACT_LANG || 'eng+spa';
+        this.defaultLang = process.env.TESSERACT_LANG || 'eng+spa';
         this.worker = null;
         this.initialized = false;
 
@@ -363,9 +363,9 @@ class TesseractConfig {
                 };
             }
 
-            // Try a simple OCR operation with a small test
-            const testBuffer = Buffer.from('test');
-            await this.extractText(testBuffer);
+            // Only check if worker is initialized and available
+            // Don't attempt to process test images during health check
+            // as this can cause crashes if the buffer is invalid
 
             return {
                 status: 'healthy',

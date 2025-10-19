@@ -279,16 +279,24 @@ class StocklyServer {
             // Initialize database connection
             await database.connect();
 
-            // Test Cloudinary connection
-            const cloudinaryHealth = await cloudinaryConfig.healthCheck();
-            if (cloudinaryHealth.status !== 'healthy') {
-                logger.warn('Cloudinary health check failed:', cloudinaryHealth);
+            // Test Cloudinary connection (wrapped in try-catch to prevent uncaught exceptions)
+            try {
+                const cloudinaryHealth = await cloudinaryConfig.healthCheck();
+                if (cloudinaryHealth.status !== 'healthy') {
+                    logger.warn('Cloudinary health check failed:', cloudinaryHealth);
+                }
+            } catch (error) {
+                logger.warn('Cloudinary health check threw an error:', error);
             }
 
-            // Test OCR functionality
-            const ocrHealth = await tesseractConfig.healthCheck();
-            if (ocrHealth.status !== 'healthy') {
-                logger.warn('OCR health check failed:', ocrHealth);
+            // Test OCR functionality (wrapped in try-catch to prevent uncaught exceptions)
+            try {
+                const ocrHealth = await tesseractConfig.healthCheck();
+                if (ocrHealth.status !== 'healthy') {
+                    logger.warn('OCR health check failed:', ocrHealth);
+                }
+            } catch (error) {
+                logger.warn('OCR health check threw an error:', error);
             }
 
             // Start HTTP server
@@ -339,7 +347,7 @@ class StocklyServer {
 const server = new StocklyServer();
 
 // Handle module loading
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && process.argv[1].endsWith('server.js')) {
     // Start server if this file is run directly
     server.start().catch(error => {
         logger.error('Server startup failed:', error);
