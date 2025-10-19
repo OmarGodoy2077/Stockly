@@ -1,1 +1,258 @@
-/.env
+# ========================================
+# STOCKLY - .gitignore
+# ========================================
+
+# ========================================
+# 1. VARIABLES DE ENTORNO Y SECRETOS
+# ========================================
+# Archivos de configuración con credenciales sensibles
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.backup
+*.env
+
+# Claves y certificados
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+
+# Credenciales de servicios
+firebase-adminsdk*.json
+service-account*.json
+credentials.json
+
+# ========================================
+# 2. NODE.JS
+# ========================================
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Archivos de caché de npm
+.npm
+.eslintcache
+.node_repl_history
+
+# Yarn
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ========================================
+# 3. LOGS
+# ========================================
+logs/
+*.log
+*.log.*
+combined.log
+error.log
+access.log
+app.log
+
+# Winston logs
+logs/**/*.log
+
+# PM2 logs
+.pm2/
+
+# ========================================
+# 4. ARCHIVOS TEMPORALES Y CACHÉ
+# ========================================
+# Sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Archivos temporales
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+.parcel-cache/
+.vscode-test/
+
+# ========================================
+# 5. TESTING
+# ========================================
+coverage/
+*.lcov
+.nyc_output/
+lib-cov/
+
+# Jest
+jest_*/
+.jest/
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+
+# ========================================
+# 6. BUILDS Y DISTRIBUCIÓN
+# ========================================
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+
+# ========================================
+# 7. EDITORES E IDEs
+# ========================================
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (WebStorm, IntelliJ, etc)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# ========================================
+# 8. BASES DE DATOS
+# ========================================
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# PostgreSQL
+*.dump
+*.sql.gz
+
+# MongoDB
+*.bson
+
+# ========================================
+# 9. ARCHIVOS SUBIDOS POR USUARIOS
+# ========================================
+# Carpetas de uploads locales
+uploads/
+public/uploads/
+static/uploads/
+temp-uploads/
+user-files/
+
+# Imágenes temporales
+*.tmp.jpg
+*.tmp.png
+*.tmp.webp
+
+# ========================================
+# 10. DOCKER
+# ========================================
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# ========================================
+# 11. TYPESCRIPT
+# ========================================
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ========================================
+# 12. MISCELÁNEOS
+# ========================================
+# Archivos de backup
+*.bak
+*.backup
+*~.nib
+
+# Archivos de configuración local
+config.local.js
+config.local.json
+
+# Archivos de documentación generada
+docs/api/
+docs/_build/
+
+# Archivos de análisis
+.bundle-analyzer/
+
+# Serverless
+.serverless/
+
+# ========================================
+# 13. ESPECÍFICOS DEL PROYECTO
+# ========================================
+# Scripts de migración temporales
+migrations/temp/
+migrations/*.backup
+
+# Datos de prueba
+test-data/
+seed-data/local/
+
+# Reportes
+reports/
+*.report.html
+
+# ========================================
+# ARCHIVOS A MANTENER (NO IGNORAR)
+# ========================================
+# Mantener archivos de ejemplo
+!.env.example
+!.env.template
+!config.example.js
+!example.config.json
+
+# Mantener archivos de documentación
+!docs/
+!README.md
+!LICENSE
+
+# Mantener estructura de carpetas
+!.gitkeep
