@@ -21,28 +21,30 @@ class ProductModel {
         stock,
         minStock,
         imageUrl,
-        barcode
+        barcode,
+        condition = 'new'
     }) {
         try {
             const query = `
                 INSERT INTO products (
                     company_id, category_id, sku, name, description,
-                    price, stock, min_stock, image_url, barcode
+                    price, stock, min_stock, image_url, barcode, condition
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING *
             `;
 
             const result = await database.query(query, [
                 companyId, categoryId, sku, name, description,
-                price, stock, minStock, imageUrl, barcode
+                price, stock, minStock, imageUrl, barcode, condition
             ]);
 
             logger.business('product_created', 'product', result.rows[0].id, {
                 companyId,
                 sku,
                 name,
-                stock
+                stock,
+                condition
             });
 
             return result.rows[0];

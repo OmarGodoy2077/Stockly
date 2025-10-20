@@ -11,27 +11,32 @@ class CompanyModel {
      * @param {Object} companyData - Company data
      * @returns {Promise<Object>} Created company
      */
-    static async create({ name, ruc, address, phone, email, website, logoUrl }) {
+    static async create({ name, address, phone, email, website, logoUrl }) {
         try {
-            const query = `
-                INSERT INTO companies (name, ruc, address, phone, email, website, logo_url)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('companies')
+                .insert({
+                    name,
+                    address,
+                    phone,
+                    email,
+                    website,
+                    logo_url: logoUrl
+                })
+                .select('*')
+                .single();
 
-            const result = await database.query(query, [name, ruc, address, phone, email, website, logoUrl]);
+            if (error) {
+                throw error;
+            }
 
-            logger.business('company_created', 'company', result.rows[0].id, {
-                name,
-                ruc
+            logger.business('company_created', 'company', data.id, {
+                name
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error creating company:', error);
-            if (error.code === '23505') { // Unique violation
-                throw new Error('RUC already exists');
-            }
             throw error;
         }
     }
@@ -65,15 +70,17 @@ class CompanyModel {
      */
     static async findByRuc(ruc) {
         try {
-            const query = `
-                SELECT *
-                FROM companies
-                WHERE ruc = $1
-            `;
+            const { data, error } = await database.supabase
+                .from('companies')
+                .select('*')
+                .eq('ruc', ruc)
+                .single();
 
-            const result = await database.query(query, [ruc]);
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
 
-            return result.rows[0] || null;
+            return data || null;
         } catch (error) {
             logger.error('Error finding company by RUC:', error);
             throw error;
@@ -243,30 +250,39 @@ class CompanyModel {
      * @param {string} userId - User ID
      * @param {string} role - User role in company
      * @param {string} invitedBy - User ID who sent the invitation
+     * @param {string} invitationCodeUsed - Invitation code used (optional)
      * @returns {Promise<Object>} Company membership data
      */
-    static async addUser(companyId, userId, role, invitedBy) {
+    static async addUser(companyId, userId, role, invitedBy, invitationCodeUsed = null) {
         try {
-            const query = `
-                INSERT INTO user_company (user_id, company_id, role, invited_by)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (user_id, company_id)
-                DO UPDATE SET
-                    role = EXCLUDED.role,
-                    is_active = true,
-                    joined_at = NOW()
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('user_company')
+                .upsert({
+                    user_id: userId,
+                    company_id: companyId,
+                    role,
+                    invited_by: invitedBy,
+                    invitation_code_used: invitationCodeUsed,
+                    is_active: true,
+                    joined_at: new Date().toISOString()
+                }, {
+                    onConflict: 'user_id,company_id'
+                })
+                .select('*')
+                .single();
 
-            const result = await database.query(query, [userId, companyId, role, invitedBy]);
+            if (error) {
+                throw error;
+            }
 
             logger.business('user_added_to_company', 'company', companyId, {
                 userId,
                 role,
-                invitedBy
+                invitedBy,
+                invitationCodeUsed
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error adding user to company:', error);
             throw error;

@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS user_company (
     invited_by UUID REFERENCES users(id),
     invitation_token VARCHAR(255),
     invitation_expires_at TIMESTAMP WITH TIME ZONE,
+    invitation_code_used VARCHAR(12),
     is_active BOOLEAN DEFAULT true,
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -89,19 +90,43 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     UNIQUE(user_id, token)
 );
 
+-- Invitations table - For company onboarding with invitation codes
+CREATE TABLE IF NOT EXISTS invitations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    code VARCHAR(12) UNIQUE NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'employee',
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '24 hours'),
+    is_active BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Index for faster token lookup
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 
--- Categories table for products
+-- Invitation indexes
+CREATE INDEX IF NOT EXISTS idx_invitations_code ON invitations(code);
+CREATE INDEX IF NOT EXISTS idx_invitations_company_id ON invitations(company_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_created_by ON invitations(created_by);
+CREATE INDEX IF NOT EXISTS idx_invitations_expires_at ON invitations(expires_at);
+CREATE INDEX IF NOT EXISTS idx_invitations_is_active ON invitations(is_active);
+-- Composite index for efficient queries on active non-expired invitations
+CREATE INDEX IF NOT EXISTS idx_invitations_active_not_expired ON invitations(is_active, expires_at);
+
+-- Categories table for products - Now supports hierarchical categories
 CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    parent_id UUID REFERENCES categories(id) ON DELETE CASCADE,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(company_id, name)
 );
 
@@ -118,6 +143,7 @@ CREATE TABLE IF NOT EXISTS products (
     min_stock INTEGER DEFAULT 5,
     image_url TEXT,
     barcode VARCHAR(255),
+    condition VARCHAR(50) CHECK (condition IN ('new', 'used', 'open_box')) DEFAULT 'new',
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -224,6 +250,29 @@ CREATE TABLE IF NOT EXISTS service_histories (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Product attributes table - Dynamic product properties
+CREATE TABLE IF NOT EXISTS product_attributes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,           -- Attribute name (e.g., "Capacity", "Speed", "Color", "Size")
+    value TEXT NOT NULL,                  -- Attribute value (e.g., "1TB", "7000MB/s", "Red", "XL")
+    order_index INTEGER DEFAULT 0,        -- Order for display
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Attribute templates table - Templates for category attributes
+CREATE TABLE IF NOT EXISTS attribute_templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    category_id UUID NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,           -- Attribute name for this category template
+    is_required BOOLEAN DEFAULT false,    -- Whether attribute is required when creating products
+    order_index INTEGER DEFAULT 0,        -- Display order
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(category_id, name)
+);
+
 -- =====================================================
 -- INDEXES FOR PERFORMANCE
 -- =====================================================
@@ -240,12 +289,19 @@ CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(is_active);
 CREATE INDEX IF NOT EXISTS idx_user_company_user_id ON user_company(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_company_company_id ON user_company(company_id);
 CREATE INDEX IF NOT EXISTS idx_user_company_role ON user_company(role);
+CREATE INDEX IF NOT EXISTS idx_user_company_invitation_code ON user_company(invitation_code_used);
+
+-- Category indexes
+CREATE INDEX IF NOT EXISTS idx_categories_company_id ON categories(company_id);
+CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_categories_hierarchy ON categories(company_id, parent_id);
 
 -- Product indexes
 CREATE INDEX IF NOT EXISTS idx_products_company_id ON products(company_id);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(company_id, sku);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock);
+CREATE INDEX IF NOT EXISTS idx_products_condition ON products(condition);
 
 -- Sales indexes
 CREATE INDEX IF NOT EXISTS idx_sales_company_id ON sales(company_id);
@@ -265,6 +321,14 @@ CREATE INDEX IF NOT EXISTS idx_service_histories_serial ON service_histories(ser
 CREATE INDEX IF NOT EXISTS idx_service_histories_status ON service_histories(status);
 CREATE INDEX IF NOT EXISTS idx_service_histories_entry_date ON service_histories(entry_date);
 
+-- Product attributes indexes
+CREATE INDEX IF NOT EXISTS idx_product_attributes_product_id ON product_attributes(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_attributes_name ON product_attributes(name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_product_attributes_unique ON product_attributes(product_id, name);
+
+-- Attribute templates indexes
+CREATE INDEX IF NOT EXISTS idx_attribute_templates_category_id ON attribute_templates(category_id);
+
 -- =====================================================
 -- FUNCTIONS AND TRIGGERS
 -- =====================================================
@@ -281,8 +345,127 @@ $$ language 'plpgsql';
 -- Triggers for updated_at
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON companies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_service_histories_updated_at BEFORE UPDATE ON service_histories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for product attributes updated_at
+CREATE OR REPLACE FUNCTION update_product_attributes_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_product_attributes_updated_at
+BEFORE UPDATE ON product_attributes
+FOR EACH ROW
+EXECUTE FUNCTION update_product_attributes_updated_at();
+
+-- Trigger for attribute templates updated_at
+CREATE OR REPLACE FUNCTION update_attribute_templates_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_attribute_templates_updated_at
+BEFORE UPDATE ON attribute_templates
+FOR EACH ROW
+EXECUTE FUNCTION update_attribute_templates_updated_at();
+
+-- Function to generate unique invitation code
+CREATE OR REPLACE FUNCTION generate_invitation_code()
+RETURNS VARCHAR(12) AS $$
+DECLARE
+    new_code VARCHAR(12);
+    exists_count INT;
+BEGIN
+    LOOP
+        new_code := UPPER(
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1) ||
+            SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', CEIL(RANDOM() * 36)::INT, 1)
+        );
+        
+        SELECT COUNT(*) INTO exists_count FROM invitations i WHERE i.code = new_code;
+        EXIT WHEN exists_count = 0;
+    END LOOP;
+    
+    RETURN new_code;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger for invitations updated_at
+CREATE OR REPLACE FUNCTION update_invitations_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_invitations_updated_at
+BEFORE UPDATE ON invitations
+FOR EACH ROW
+EXECUTE FUNCTION update_invitations_updated_at();
+
+-- Function to validate invitation
+CREATE OR REPLACE FUNCTION validate_invitation(p_code VARCHAR)
+RETURNS TABLE(
+    invitation_id UUID,
+    company_id UUID,
+    company_name VARCHAR,
+    role VARCHAR,
+    is_valid BOOLEAN,
+    error_message VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        i.id,
+        i.company_id,
+        c.name,
+        i.role,
+        CASE 
+            WHEN i.id IS NULL THEN FALSE
+            WHEN i.expires_at < NOW() THEN FALSE
+            WHEN i.is_active = FALSE THEN FALSE
+            ELSE TRUE
+        END as is_valid,
+        CASE 
+            WHEN i.id IS NULL THEN 'Invitation code not found'::VARCHAR
+            WHEN i.expires_at < NOW() THEN 'Invitation code has expired'::VARCHAR
+            WHEN i.is_active = FALSE THEN 'Invitation code has been deactivated'::VARCHAR
+            ELSE NULL::VARCHAR
+        END as error_message
+    FROM invitations i
+    LEFT JOIN companies c ON i.company_id = c.id
+    WHERE i.code = p_code;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to cleanup expired invitations
+CREATE OR REPLACE FUNCTION cleanup_expired_invitations()
+RETURNS TABLE(cleaned_count INT) AS $$
+DECLARE
+    count INT;
+BEGIN
+    UPDATE invitations 
+    SET is_active = FALSE
+    WHERE expires_at < NOW() AND is_active = TRUE;
+    GET DIAGNOSTICS count = ROW_COUNT;
+    RETURN QUERY SELECT count;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Function to calculate warranty expiration date
 CREATE OR REPLACE FUNCTION calculate_warranty_expiry(months INTEGER, start_date DATE DEFAULT CURRENT_DATE)
@@ -385,6 +568,60 @@ WHERE w.serial_number = 'SN123456789' AND u.email = 'owner@demo.com';
 -- VIEWS FOR COMMON QUERIES
 -- =====================================================
 
+-- Category hierarchy view
+CREATE OR REPLACE VIEW category_hierarchy AS
+SELECT
+    c.id,
+    c.company_id,
+    c.name,
+    c.description,
+    c.parent_id,
+    COALESCE(parent.name, 'Root Category') as parent_name,
+    COUNT(DISTINCT p.id) as product_count,
+    c.created_at,
+    c.updated_at,
+    c.is_active
+FROM categories c
+LEFT JOIN categories parent ON c.parent_id = parent.id
+LEFT JOIN products p ON c.id = p.category_id AND p.is_active = true
+WHERE c.is_active = true
+GROUP BY c.id, c.company_id, c.name, c.description, c.parent_id, parent.name, c.created_at, c.updated_at, c.is_active;
+
+-- Products with attributes view
+CREATE OR REPLACE VIEW products_with_attributes AS
+SELECT
+    p.id,
+    p.company_id,
+    p.category_id,
+    p.sku,
+    p.name,
+    p.description,
+    p.price,
+    p.stock,
+    p.min_stock,
+    p.image_url,
+    p.barcode,
+    p.condition,
+    p.is_active,
+    c.name as category_name,
+    json_agg(
+        json_build_object(
+            'id', pa.id,
+            'name', pa.name,
+            'value', pa.value,
+            'order_index', pa.order_index
+        ) ORDER BY pa.order_index, pa.name
+    ) FILTER (WHERE pa.id IS NOT NULL) as attributes,
+    p.created_at,
+    p.updated_at
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN product_attributes pa ON p.id = pa.product_id
+WHERE p.is_active = true
+GROUP BY p.id, p.company_id, p.category_id, p.sku, p.name, p.description,
+         p.price, p.stock, p.min_stock, p.image_url, p.barcode, p.condition,
+         p.is_active, c.name, p.created_at, p.updated_at;
+
 -- Active warranties view
 CREATE OR REPLACE VIEW active_warranties AS
 SELECT
@@ -438,6 +675,7 @@ ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_histories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
 
 -- Basic RLS policies (users can only access their company data)
 -- These are basic policies - you might want to make them more sophisticated
@@ -449,6 +687,40 @@ CREATE POLICY "Users can view company data" ON companies FOR SELECT USING (
 CREATE POLICY "Users can view products in their companies" ON products FOR SELECT USING (
     EXISTS (SELECT 1 FROM user_company WHERE company_id = products.company_id AND user_id = auth.uid())
 );
+
+-- Invitations RLS Policies
+CREATE POLICY "Company owners can view invitations" ON invitations
+    FOR SELECT USING (
+        auth.uid() IN (
+            SELECT user_id FROM user_company 
+            WHERE company_id = invitations.company_id 
+            AND role IN ('owner', 'admin')
+        )
+    );
+
+CREATE POLICY "Only owners can create invitations" ON invitations
+    FOR INSERT WITH CHECK (
+        auth.uid() IN (
+            SELECT user_id FROM user_company 
+            WHERE company_id = invitations.company_id 
+            AND role = 'owner'
+        )
+    );
+
+CREATE POLICY "Only owners can update invitations" ON invitations
+    FOR UPDATE USING (
+        auth.uid() IN (
+            SELECT user_id FROM user_company 
+            WHERE company_id = invitations.company_id 
+            AND role = 'owner'
+        )
+    ) WITH CHECK (
+        auth.uid() IN (
+            SELECT user_id FROM user_company 
+            WHERE company_id = invitations.company_id 
+            AND role = 'owner'
+        )
+    );
 
 -- Add similar policies for other tables...
 
@@ -464,6 +736,14 @@ COMMENT ON TABLE sales IS 'Sales records with serial number tracking';
 COMMENT ON TABLE warranties IS 'Warranty tracking with expiration dates';
 COMMENT ON TABLE service_histories IS 'Technical service and repair tracking';
 COMMENT ON TABLE purchases IS 'Purchase orders and inventory entries';
+COMMENT ON TABLE product_attributes IS 'Stores dynamic product attributes (e.g., color, size, capacity, speed)';
+COMMENT ON TABLE attribute_templates IS 'Template for attributes required in a category';
+COMMENT ON COLUMN product_attributes.name IS 'Attribute name (e.g., "Capacity", "Speed", "Color", "Size")';
+COMMENT ON COLUMN product_attributes.value IS 'Attribute value (e.g., "1TB", "7000MB/s", "Red", "XL")';
+COMMENT ON COLUMN attribute_templates.name IS 'Attribute name that should be set for products in this category';
+COMMENT ON COLUMN attribute_templates.is_required IS 'Whether this attribute is mandatory for products in this category';
+COMMENT ON COLUMN categories.parent_id IS 'References parent category for hierarchical structure (NULL for root categories)';
+COMMENT ON COLUMN products.condition IS 'Product condition: new, used, or open_box';
 
 -- =====================================================
 -- SUCCESS MESSAGE

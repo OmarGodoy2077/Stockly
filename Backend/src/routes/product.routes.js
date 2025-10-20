@@ -334,4 +334,10 @@ router.post('/bulk-update',
     ProductController.bulkUpdate
 );
 
+// Import product attributes routes
+import productAttributeRoutes from './productAttribute.routes.js';
+
+// Mount product attributes routes at /:productId/attributes
+router.use('/:productId/attributes', productAttributeRoutes);
+
 export default router;

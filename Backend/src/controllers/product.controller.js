@@ -91,7 +91,8 @@ class ProductController {
                 stock: parseInt(req.body.stock) || 0,
                 minStock: parseInt(req.body.min_stock) || 5,
                 imageUrl: req.body.image_url,
-                barcode: req.body.barcode
+                barcode: req.body.barcode,
+                condition: req.body.condition || 'new'
             };
 
             const product = await ProductModel.create(productData);
@@ -99,7 +100,8 @@ class ProductController {
             logger.business('product_created', 'product', req.user.id, {
                 productId: product.id,
                 companyId: req.companyId,
-                sku: product.sku
+                sku: product.sku,
+                condition: product.condition
             });
 
             ResponseHandler.success(res, product, 'Product created successfully', 201);
@@ -128,6 +130,7 @@ class ProductController {
             if (req.body.min_stock !== undefined) updates.min_stock = parseInt(req.body.min_stock);
             if (req.body.image_url !== undefined) updates.image_url = req.body.image_url;
             if (req.body.barcode !== undefined) updates.barcode = req.body.barcode;
+            if (req.body.condition !== undefined) updates.condition = req.body.condition;
 
             const product = await ProductModel.update(id, req.companyId, updates);
 

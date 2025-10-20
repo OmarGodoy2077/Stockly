@@ -16,25 +16,32 @@ class UserModel {
         try {
             const hashedPassword = await bcrypt.hash(password, 12);
 
-            const query = `
-                INSERT INTO users (email, password_hash, name, phone)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, email, name, phone, is_active, created_at
-            `;
+            const { data, error } = await database.supabase
+                .from('users')
+                .insert({
+                    email,
+                    password_hash: hashedPassword,
+                    name,
+                    phone
+                })
+                .select('id, email, name, phone, is_active, created_at')
+                .single();
 
-            const result = await database.query(query, [email, hashedPassword, name, phone]);
+            if (error) {
+                if (error.code === '23505') { // Unique violation
+                    throw new Error('Email already exists');
+                }
+                throw error;
+            }
 
-            logger.business('user_created', 'user', result.rows[0].id, {
+            logger.business('user_created', 'user', data.id, {
                 email,
                 name
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error creating user:', error);
-            if (error.code === '23505') { // Unique violation
-                throw new Error('Email already exists');
-            }
             throw error;
         }
     }
@@ -46,15 +53,17 @@ class UserModel {
      */
     static async findByEmail(email) {
         try {
-            const query = `
-                SELECT id, email, password_hash, name, phone, is_active, last_login_at, created_at
-                FROM users
-                WHERE email = $1
-            `;
+            const { data, error } = await database.supabase
+                .from('users')
+                .select('id, email, password_hash, name, phone, is_active, last_login_at, created_at')
+                .eq('email', email)
+                .single();
 
-            const result = await database.query(query, [email]);
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
 
-            return result.rows[0] || null;
+            return data || null;
         } catch (error) {
             logger.error('Error finding user by email:', error);
             throw error;
@@ -68,15 +77,17 @@ class UserModel {
      */
     static async findById(userId) {
         try {
-            const query = `
-                SELECT id, email, name, phone, is_active, last_login_at, created_at
-                FROM users
-                WHERE id = $1
-            `;
+            const { data, error } = await database.supabase
+                .from('users')
+                .select('id, email, name, phone, is_active, last_login_at, created_at')
+                .eq('id', userId)
+                .single();
 
-            const result = await database.query(query, [userId]);
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
 
-            return result.rows[0] || null;
+            return data || null;
         } catch (error) {
             logger.error('Error finding user by ID:', error);
             throw error;
@@ -105,13 +116,14 @@ class UserModel {
      */
     static async updateLastLogin(userId) {
         try {
-            const query = `
-                UPDATE users
-                SET last_login_at = NOW()
-                WHERE id = $1
-            `;
+            const { error } = await database.supabase
+                .from('users')
+                .update({ last_login_at: new Date().toISOString() })
+                .eq('id', userId);
 
-            await database.query(query, [userId]);
+            if (error) {
+                throw error;
+            }
 
             logger.auth('login', userId, '', { success: true });
         } catch (error) {
@@ -278,27 +290,49 @@ class UserModel {
      */
     static async getUserCompanies(userId) {
         try {
-            const query = `
-                SELECT
-                    c.id,
-                    c.name,
-                    c.ruc,
-                    c.address,
-                    c.phone,
-                    c.email as company_email,
-                    uc.role,
-                    uc.is_active as member_active,
-                    uc.joined_at,
-                    uc.invited_by
-                FROM companies c
-                INNER JOIN user_company uc ON c.id = uc.company_id
-                WHERE uc.user_id = $1 AND uc.is_active = true
-                ORDER BY uc.joined_at DESC
-            `;
+            const { data, error } = await database.supabase
+                .from('user_company')
+                .select(`
+                    companies!inner (
+                        id,
+                        name,
+                        ruc,
+                        address,
+                        phone,
+                        email,
+                        website,
+                        logo_url,
+                        created_at
+                    ),
+                    role,
+                    is_active,
+                    joined_at,
+                    invited_by
+                `)
+                .eq('user_id', userId)
+                .eq('is_active', true)
+                .order('joined_at', { ascending: false });
 
-            const result = await database.query(query, [userId]);
+            if (error) {
+                throw error;
+            }
 
-            return result.rows;
+            // Transform data to match expected format
+            return data.map(item => ({
+                id: item.companies.id,
+                name: item.companies.name,
+                ruc: item.companies.ruc,
+                address: item.companies.address,
+                phone: item.companies.phone,
+                company_email: item.companies.email,
+                website: item.companies.website,
+                logo_url: item.companies.logo_url,
+                created_at: item.companies.created_at,
+                role: item.role,
+                member_active: item.is_active,
+                joined_at: item.joined_at,
+                invited_by: item.invited_by
+            }));
         } catch (error) {
             logger.error('Error getting user companies:', error);
             throw error;
@@ -342,14 +376,23 @@ class UserModel {
         try {
             // Store in memory or database - for now we'll use a simple approach
             // In production, consider using Redis for better performance
-            const query = `
-                INSERT INTO refresh_tokens (user_id, token, expires_at, created_at)
-                VALUES ($1, $2, NOW() + INTERVAL '7 days', NOW())
-                ON CONFLICT (user_id, token) 
-                DO UPDATE SET expires_at = NOW() + INTERVAL '7 days'
-            `;
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-            await database.query(query, [userId, refreshToken]);
+            const { error } = await database.supabase
+                .from('refresh_tokens')
+                .upsert({
+                    user_id: userId,
+                    token: refreshToken,
+                    expires_at: expiresAt.toISOString(),
+                    created_at: new Date().toISOString()
+                }, {
+                    onConflict: 'user_id,token'
+                });
+
+            if (error) {
+                throw error;
+            }
 
             logger.auth('refresh_token_stored', userId, '', {});
         } catch (error) {

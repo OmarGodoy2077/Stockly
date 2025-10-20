@@ -59,7 +59,7 @@ class CategoryController {
      */
     static async create(req, res) {
         try {
-            const { name, description } = req.body;
+            const { name, description, parent_id } = req.body;
 
             if (!name || name.trim() === '') {
                 return ResponseHandler.badRequest(res, 'Category name is required');
@@ -68,7 +68,8 @@ class CategoryController {
             const categoryData = {
                 companyId: req.companyId,
                 name: name.trim(),
-                description: description || null
+                description: description || null,
+                parentId: parent_id || null
             };
 
             const category = await CategoryModel.create(categoryData);
@@ -76,7 +77,8 @@ class CategoryController {
             logger.business('category_created', 'category', req.user.id, {
                 categoryId: category.id,
                 companyId: req.companyId,
-                name
+                name,
+                parentId: parent_id
             });
 
             ResponseHandler.created(
@@ -97,11 +99,12 @@ class CategoryController {
     static async update(req, res) {
         try {
             const { id } = req.params;
-            const { name, description } = req.body;
+            const { name, description, parent_id } = req.body;
 
             const updates = {};
             if (name !== undefined) updates.name = name.trim();
             if (description !== undefined) updates.description = description;
+            if (parent_id !== undefined) updates.parent_id = parent_id;
 
             if (Object.keys(updates).length === 0) {
                 return ResponseHandler.badRequest(res, 'No fields to update');

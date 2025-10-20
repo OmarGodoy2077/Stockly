@@ -1,5 +1,6 @@
 import UserModel from '../models/user.model.js';
 import CompanyModel from '../models/company.model.js';
+import InvitationModel from '../models/invitation.model.js';
 import { jwtConfig } from '../config/jwt.js';
 import { logger } from '../config/logger.js';
 import { database } from '../config/database.js';
@@ -10,33 +11,31 @@ import { database } from '../config/database.js';
 class AuthController {
 
     /**
-     * Register new user and create their first company
+     * Register new user with choice: create company or join with invitation
      * POST /api/v1/auth/register
+     * 
+     * Flujo:
+     * 1. Si invitationCode: validar y asignar a empresa existente
+     * 2. Si NO invitationCode: crear nueva empresa
      */
     static async register(req, res) {
-        const client = await database.pool.connect();
-        
         try {
             const {
                 email,
                 password,
                 name,
                 phone,
+                invitationCode,
                 companyName,
-                companyRuc,
                 companyAddress,
                 companyPhone,
                 companyEmail,
                 companyWebsite
             } = req.body;
 
-            // Start transaction
-            await client.query('BEGIN');
-
             // Check if email already exists
             const existingUser = await UserModel.findByEmail(email);
             if (existingUser) {
-                await client.query('ROLLBACK');
                 logger.security('registration_attempt_duplicate_email', 'low', {
                     email,
                     ip: req.ip
@@ -44,16 +43,6 @@ class AuthController {
                 return res.status(400).json({
                     success: false,
                     error: 'Email already registered'
-                });
-            }
-
-            // Check if RUC already exists
-            const existingCompany = await CompanyModel.findByRuc(companyRuc);
-            if (existingCompany) {
-                await client.query('ROLLBACK');
-                return res.status(400).json({
-                    success: false,
-                    error: 'RUC already registered'
                 });
             }
 
@@ -65,77 +54,116 @@ class AuthController {
                 phone
             });
 
-            // Create company
-            const company = await CompanyModel.create({
-                name: companyName,
-                ruc: companyRuc,
-                address: companyAddress,
-                phone: companyPhone,
-                email: companyEmail,
-                website: companyWebsite
-            });
+            let company;
+            let role = 'owner'; // Default role
+            let invitationUsed = null;
 
-            // Link user to company as owner
-            await CompanyModel.addUser(company.id, user.id, 'owner', user.id);
+            try {
+                if (invitationCode) {
+                    // Validar código de invitación
+                    const invitation = await InvitationModel.validate(invitationCode);
+                    
+                    if (!invitation) {
+                        // Eliminar usuario creado
+                        throw new Error('Invalid or expired invitation code');
+                    }
 
-            // Commit transaction
-            await client.query('COMMIT');
+                    // Check if user already belongs to this company
+                    const alreadyMember = await InvitationModel.hasUserJoinedCompany(
+                        user.id,
+                        invitation.company_id
+                    );
 
-            // Generate tokens
-            const accessToken = jwtConfig.generateAccessToken({
-                user_id: user.id,
-                email: user.email,
-                company_id: company.id,
-                role: 'owner'
-            });
+                    if (alreadyMember) {
+                        throw new Error('User already belongs to this company');
+                    }
 
-            const refreshToken = jwtConfig.generateRefreshToken({
-                user_id: user.id,
-                email: user.email,
-                company_id: company.id,
-                role: 'owner'
-            });
+                    company = {
+                        id: invitation.company_id,
+                        name: invitation.company_name
+                    };
+                    role = invitation.role;
+                    invitationUsed = invitationCode;
 
-            // Store refresh token
-            await UserModel.storeRefreshToken(user.id, refreshToken);
+                    logger.business('user_registered_via_invitation', 'user', user.id, {
+                        email,
+                        companyId: company.id,
+                        invitationCode
+                    });
+                } else {
+                    // Crear nueva empresa
+                    company = await CompanyModel.create({
+                        name: companyName,
+                        address: companyAddress,
+                        phone: companyPhone,
+                        email: companyEmail,
+                        website: companyWebsite
+                    });
 
-            logger.business('user_registered', 'user', user.id, {
-                email,
-                companyId: company.id,
-                companyName
-            });
+                    role = 'owner';
 
-            res.status(201).json({
-                success: true,
-                message: 'Registration successful',
-                data: {
-                    user: {
-                        id: user.id,
-                        email: user.email,
-                        name: user.name,
-                        phone: user.phone
-                    },
-                    company: {
-                        id: company.id,
-                        name: company.name,
-                        ruc: company.ruc,
-                        role: 'owner'
-                    },
-                    accessToken,
-                    refreshToken,
-                    expiresIn: jwtConfig.expiresIn
+                    logger.business('user_registered_with_company', 'user', user.id, {
+                        email,
+                        companyId: company.id,
+                        companyName
+                    });
                 }
-            });
+
+                // Link user to company with appropriate role
+                await CompanyModel.addUser(company.id, user.id, role, user.id, invitationUsed);
+
+                // Generate tokens
+                const accessToken = jwtConfig.generateAccessToken({
+                    user_id: user.id,
+                    email: user.email,
+                    company_id: company.id,
+                    role
+                });
+
+                const refreshToken = jwtConfig.generateRefreshToken({
+                    user_id: user.id,
+                    email: user.email,
+                    company_id: company.id,
+                    role
+                });
+
+                // Store refresh token
+                await UserModel.storeRefreshToken(user.id, refreshToken);
+
+                res.status(201).json({
+                    success: true,
+                    message: 'Registration successful',
+                    data: {
+                        user: {
+                            id: user.id,
+                            email: user.email,
+                            name: user.name,
+                            phone: user.phone
+                        },
+                        company: {
+                            id: company.id,
+                            name: company.name,
+                            role
+                        },
+                        accessToken,
+                        refreshToken,
+                        expiresIn: jwtConfig.expiresIn
+                    }
+                });
+
+            } catch (innerError) {
+                logger.error('Error during registration process:', innerError);
+                throw innerError;
+            }
 
         } catch (error) {
-            await client.query('ROLLBACK');
             logger.error('Registration error:', error);
             res.status(500).json({
                 success: false,
-                error: 'Registration failed. Please try again.'
+                error: error.message || 'Registration failed. Please try again.'
             });
         } finally {
-            client.release();
+            // No pool to release in Supabase
         }
     }
 

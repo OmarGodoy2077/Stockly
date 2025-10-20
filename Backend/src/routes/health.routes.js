@@ -8,6 +8,47 @@ import ResponseHandler from '../utils/responseHandler.js';
 const router = express.Router();
 
 /**
+ * Check if invitation system migration has been applied
+ * @returns {Promise<Object>} Migration status
+ */
+async function checkInvitationMigration() {
+    try {
+        // Check if invitations table exists
+        const { data: tableExists, error: tableError } = await database.supabase
+            .from('information_schema.tables')
+            .select('table_name')
+            .eq('table_name', 'invitations')
+            .single();
+
+        if (tableError && tableError.code !== 'PGRST116') { // PGRST116 = no rows returned
+            throw tableError;
+        }
+
+        // Check if generate_invitation_code function exists
+        const { data: functionExists, error: functionError } = await database.supabase
+            .rpc('generate_invitation_code');
+
+        const hasTable = !!tableExists;
+        const hasFunction = !functionError;
+
+        return {
+            status: hasTable && hasFunction ? 'migrated' : 'pending',
+            table_exists: hasTable,
+            function_exists: hasFunction,
+            message: hasTable && hasFunction
+                ? 'Invitation system migration applied'
+                : 'Invitation system migration pending - run migrations/add-invitations-system.sql'
+        };
+    } catch (error) {
+        return {
+            status: 'error',
+            error: error.message,
+            message: 'Unable to check migration status'
+        };
+    }
+}
+
+/**
  * Health check endpoint - No authentication required
  * GET /api/health
  */
@@ -24,10 +65,13 @@ router.get('/', async (req, res) => {
         // Check OCR health
         const ocrHealth = await tesseractConfig.healthCheck();
 
+        // Check invitation migration status
+        const invitationMigration = await checkInvitationMigration();
+
         // Calculate response time
         const responseTime = Date.now() - startTime;
 
-        // Overall health status
+        // Overall health status (invitation migration is not critical for basic health)
         const overallStatus = dbHealth.status === 'healthy' &&
                              cloudinaryHealth.status === 'healthy' &&
                              ocrHealth.status === 'healthy' ? 'healthy' : 'unhealthy';
@@ -42,7 +86,8 @@ router.get('/', async (req, res) => {
             services: {
                 database: dbHealth,
                 cloudinary: cloudinaryHealth,
-                ocr: ocrHealth
+                ocr: ocrHealth,
+                invitation_migration: invitationMigration
             },
             system: {
                 node_version: process.version,
@@ -173,6 +218,30 @@ router.get('/live', (req, res) => {
         timestamp: new Date().toISOString(),
         uptime: process.uptime()
     }, 'Service is alive');
+});
+
+/**
+ * Invitation migration status check
+ * GET /api/health/invitations
+ */
+router.get('/invitations', async (req, res) => {
+    try {
+        const migrationStatus = await checkInvitationMigration();
+
+        if (migrationStatus.status === 'migrated') {
+            ResponseHandler.success(res, migrationStatus, 'Invitation system migration applied');
+        } else if (migrationStatus.status === 'pending') {
+            ResponseHandler.error(res, 'Invitation system migration pending', 503, migrationStatus);
+        } else {
+            ResponseHandler.error(res, 'Unable to check migration status', 500, migrationStatus);
+        }
+
+    } catch (error) {
+        logger.error('Invitation migration check error:', error);
+        ResponseHandler.error(res, 'Migration check failed', 500, {
+            error: error.message
+        });
+    }
 });
 
 export default router;

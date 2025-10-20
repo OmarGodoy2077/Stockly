@@ -1,222 +1,384 @@
-# Stockly Backend - SaaS para Gestión de Inventario
+# 📚 Stockly Backend - Documentación Oficial
 
-Backend moderno para sistema de gestión de inventario con soporte para ventas, garantías, números de serie y servicio técnico.
+**Versión:** 1.1.0  
+**Última Actualización:** 20 de Octubre, 2025  
+**Estado:** ✅ Listo para Producción
 
-## 🚀 Características Principales
+---
 
-- **Gestión de Empresas**: Multi-tenant con roles de usuario (owner, admin, seller, inventory)
-- **Productos**: Control de inventario con SKU, stock y precios
-- **Ventas**: Registro de ventas con extracción automática de números de serie vía OCR
-- **Garantías**: Seguimiento automático de fechas de vencimiento y alertas
-- **Servicio Técnico**: Historial completo con fotos y estados de reparación
-- **Compras**: Registro de entradas de inventario
-- **Autenticación JWT**: Con refresh tokens y seguridad avanzada
-- **Almacenamiento**: Integración con Cloudinary para imágenes optimizadas
-- **OCR**: Procesamiento automático de números de serie desde imágenes
+## 🎯 ¿Qué es Stockly?
 
-## 📋 Prerrequisitos
+Stockly es un **sistema SaaS multi-tenant** para la gestión integral de inventario, ventas y servicio técnico diseñado para emprendedores en LATAM. Incluye características avanzadas como:
 
-- **Node.js 20+**
-- **Cuenta de Supabase** con un proyecto PostgreSQL creado
-- **Cuenta de Cloudinary** (gratuita) para almacenamiento de imágenes
-- **Git** para control de versiones
+- ✅ **Multi-tenant**: Múltiples empresas y usuarios
+- ✅ **Inventario Flexible**: Categorías jerárquicas y atributos dinámicos
+- ✅ **Gestión de Ventas**: Con OCR para números de serie
+- ✅ **Garantías y Servicio Técnico**: Seguimiento completo
+- ✅ **Sistema de Compras**: Registro y actualización automática de stock
+- ✅ **Invitaciones**: Sistema de códigos para agregar usuarios
 
-## 🛠️ Instalación
+---
 
-1. **Clona el repositorio:**
-   ```bash
-   git clone <url-del-repositorio>
-   cd stockly-backend
-   ```
+## 🚀 Inicio Rápido (5 minutos)
 
-2. **Instala las dependencias:**
-   ```bash
-   npm install
-   ```
+### Nueva Instalación
 
-3. **Configura la base de datos en Supabase:**
-   
-   a. Crea un proyecto en [Supabase](https://supabase.com) (si no tienes uno)
-   
-   b. Ve a **SQL Editor** en el menú lateral
-   
-   c. Crea una nueva query
-   
-   d. Copia y pega el contenido completo del archivo `database/init.sql`
-   
-   e. Ejecuta el script haciendo clic en **"Run"** ▶️
-   
-   f. Verifica que todas las tablas se hayan creado en la sección **Table Editor**
+```bash
+# 1. Clonar el repositorio
+git clone <repository-url>
+cd Backend
 
-4. **Configura las variables de entorno:**
-   
-   Crea un archivo `.env` en la raíz del proyecto Backend:
-   ```bash
-   cp .env.template .env
-   # o si prefieres:
-   # cp .env.example .env
-   ```
+# 2. Instalar dependencias
+npm install
 
-   **📋 Variables Requeridas** (obtén las instrucciones en [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)):
-   
-   ```env
-   # Supabase Database (desde Project Settings > Database > Connection String)
-   DATABASE_URL=postgresql://postgres.xxxxx:password@aws-0-region.pooler.supabase.com:6543/postgres
+# 3. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales
 
-   # JWT (genera secretos aleatorios seguros)
-   JWT_SECRET=genera-un-secreto-de-32-caracteres-minimo
-   JWT_REFRESH_SECRET=otro-secreto-diferente
+# 4. Inicializar base de datos
+# En Supabase SQL Editor, ejecutar: database/init.sql
 
-   # Cloudinary (desde Dashboard > Account Details)
-   CLOUDINARY_CLOUD_NAME=tu-cloud-name
-   CLOUDINARY_API_KEY=tu-api-key
-   CLOUDINARY_API_SECRET=tu-api-secret
+# 5. Iniciar servidor
+npm run dev
 
-   # Server
-   PORT=3001
-   NODE_ENV=development
-   ```
-
-   **📖 Ver Guía Completa**: [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md) tiene instrucciones paso a paso para obtener cada credencial.
-
-5. **Inicia el servidor:**
-   ```bash
-   # Desarrollo (con hot-reload)
-   npm run dev
-
-   # Producción
-   npm start
-   ```
-
-   Si todo está configurado correctamente, deberías ver:
-   ```
-   ✅ Database connected successfully
-   ✅ Cloudinary SDK initialized successfully  
-   🚀 Stockly Backend Server started successfully
-   ```
-
-## 📁 Estructura del Proyecto
-
-```
-src/
-├── config/           # Configuraciones
-│   ├── database.js   # Conexión a PostgreSQL
-│   ├── jwt.js        # Configuración JWT
-│   ├── logger.js     # Winston logger
-│   ├── firebase.js   # Firebase Admin SDK
-│   └── tesseract.js  # Configuración OCR
-├── controllers/      # Lógica de negocio
-│   ├── auth.controller.js
-│   ├── product.controller.js
-│   ├── sale.controller.js
-│   └── serviceHistory.controller.js
-├── routes/           # Definición de rutas
-│   ├── auth.routes.js
-│   ├── product.routes.js
-│   └── sale.routes.js
-├── middlewares/      # Middlewares reutilizables
-│   ├── auth.middleware.js
-│   ├── role.middleware.js
-│   └── validation.middleware.js
-├── models/           # Consultas a base de datos
-│   ├── user.model.js
-│   ├── product.model.js
-│   └── sale.model.js
-├── services/         # Servicios externos
-│   ├── firebaseStorage.service.js
-│   └── ocr.service.js
-├── utils/            # Utilidades
-│   ├── dateUtils.js
-│   └── responseHandler.js
-├── validations/      # Esquemas de validación
-│   ├── auth.schema.js
-│   └── product.schema.js
-└── server.js         # Punto de entrada
-
-database/
-└── init.sql          # Script de inicialización de BD
-
-docs/
-├── ARCHITECTURE.md  # Documentación de arquitectura
-├── API.md           # Documentación de API
-└── README.md        # Esta documentación
+# ✅ Backend corriendo en http://localhost:3000
 ```
 
-## 🔧 Configuración para Railway (Despliegue)
+### Migrar Base de Datos Existente
 
-1. **Variables de entorno en Railway:**
-   - `DATABASE_URL`: URL de PostgreSQL desde Supabase (Settings → Database → Connection string)
-   - `SUPABASE_URL`: https://[PROJECT-REF].supabase.co
-   - `SUPABASE_ANON_KEY`: Tu anon/public key de Supabase
-   - `JWT_SECRET`: Genera uno seguro (mínimo 32 caracteres)
-   - `JWT_REFRESH_SECRET`: Otro secreto diferente para refresh tokens
-   - `CLOUDINARY_CLOUD_NAME`: Tu cloud name de Cloudinary
-   - `CLOUDINARY_API_KEY`: API key de Cloudinary
-   - `CLOUDINARY_API_SECRET`: API secret de Cloudinary
-   - `NODE_ENV=production`
-   - `PORT=3001` (Railway lo puede sobrescribir automáticamente)
+```bash
+# Si ya tienes una base de datos en producción
+# En Supabase SQL Editor, ejecutar: migrations/add-product-improvements.sql
 
-2. **Build Command:**
-   ```bash
-   npm install
-   ```
+npm run dev
+```
 
-3. **Start Command:**
-   ```bash
-   npm start
-   ```
+---
 
-4. **Despliegue:**
-   - Conecta tu repositorio de GitHub a Railway
-   - Railway detectará automáticamente que es un proyecto Node.js
-   - Configura todas las variables de entorno listadas arriba
-   - El despliegue se realizará automáticamente
+## 📖 Guía de Documentación
 
-## 📚 Scripts Disponibles
+### Para Empezar
 
-- `npm run dev` - Inicia servidor en modo desarrollo con hot-reload
-- `npm start` - Inicia servidor en producción
-- `npm run lint` - Ejecuta ESLint para verificar código
+| Documento | Para Quién | Tiempo | Descripción |
+|-----------|-----------|--------|-------------|
+| **[README.md](README.md)** (este) | Todos | 5 min | Visión general y guía rápida |
+| **[SETUP.md](SETUP.md)** | DevOps/Desarrolladores | 15 min | Configuración completa del entorno |
+| **[API_REFERENCE.md](API_REFERENCE.md)** | Desarrolladores Frontend | 30 min | Todos los endpoints con ejemplos |
 
-## 📖 Documentación Adicional
+### Para Profundizar
 
-Consulta la carpeta `docs/` para documentación detallada:
+| Documento | Para Quién | Tiempo | Descripción |
+|-----------|-----------|--------|-------------|
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Arquitectos/Tech Leads | 20 min | Arquitectura del sistema completa |
+| **[CHANGELOG.md](CHANGELOG.md)** | Product Managers | 10 min | Historial de cambios por versión |
 
-- **[API.md](docs/API.md)** - Documentación completa de endpoints y ejemplos
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Arquitectura del sistema y modelo de datos
-- **[AUTHENTICATION_GUIDE.md](docs/AUTHENTICATION_GUIDE.md)** - Guía de autenticación JWT
-- **[IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md)** - Resumen de implementación
-- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Guía completa de despliegue en Supabase y Railway
+---
 
-## 🔒 Seguridad
+## 🌟 Características Principales
 
-- Todas las contraseñas se hashean con bcrypt
-- JWT con refresh tokens para seguridad mejorada
-- Validación estricta de datos con Zod
-- Middlewares de autenticación y autorización
-- Logging estructurado para auditoría
-- Imágenes almacenadas de forma segura en Cloudinary
-- Optimización automática de imágenes con WebP
+### 1. **Categorías Jerárquicas**
+Crea estructuras de categorías con subcategorías ilimitadas:
 
-## 🚀 Despliegue en Producción
+```
+Electrónica
+└── Componentes PC
+    ├── Procesadores
+    ├── Memorias RAM
+    │   ├── DDR4
+    │   └── DDR5
+    └── Almacenamiento
+        └── SSDs
+```
 
-1. **Railway (Recomendado):**
-   - Conecta tu repositorio de GitHub
-   - Configura las variables de entorno
-   - Railway detectará automáticamente Node.js
-   - El despliegue es automático en cada push
+### 2. **Atributos Dinámicos**
+Cada producto puede tener atributos personalizados según su categoría:
 
-2. **Variables críticas para producción:**
-   ```env
-   NODE_ENV=production
-   JWT_SECRET=un-secreto-muy-largo-y-seguro
-   JWT_REFRESH_SECRET=otro-secreto-diferente-y-seguro
-   ```
+**Ejemplo - Componente RAM:**
+```json
+{
+  "Tipo": "DDR4",
+  "Capacidad": "16GB",
+  "Velocidad": "3200MHz",
+  "Marca": "Corsair"
+}
+```
 
-## 🤝 Soporte
+**Ejemplo - Ropa:**
+```json
+{
+  "Talla": "XL",
+  "Color": "Rojo",
+  "Material": "Algodón"
+}
+```
 
-Para soporte técnico o consultas sobre la implementación, revisa la documentación en `/docs` o contacta al equipo de desarrollo.
+### 3. **Estados de Producto**
+- `new` - Producto nuevo sin usar
+- `used` - Producto previamente utilizado
+- `open_box` - Abierto pero sin usar
+
+### 4. **Sistema de Invitaciones**
+Los dueños de empresas pueden generar códigos únicos para invitar usuarios:
+- Códigos de 8 caracteres alfanuméricos
+- Válidos por 24 horas
+- Asignación automática de roles
+
+---
+
+## 🔧 Stack Tecnológico
+
+| Componente | Tecnología | Versión |
+|------------|------------|---------|
+| Runtime | Node.js | 20+ |
+| Framework | Express.js | 4.19+ |
+| Base de Datos | PostgreSQL | 14+ |
+| Hosting BD | Supabase | - |
+| Autenticación | JWT + bcrypt | - |
+| Validación | Zod | 3+ |
+| Logging | Winston | 3+ |
+| OCR | Tesseract.js | 5+ |
+| Almacenamiento | Firebase Storage | 12+ |
+
+---
+
+## 📦 Módulos Implementados
+
+### Core
+- ✅ **Autenticación** - Login, registro, refresh tokens
+- ✅ **Usuarios** - Gestión de perfiles y permisos
+- ✅ **Empresas** - Multi-tenant con aislamiento de datos
+- ✅ **Invitaciones** - Sistema de códigos temporales
+
+### Inventario
+- ✅ **Productos** - CRUD con categorías y atributos
+- ✅ **Categorías** - Jerarquía multinivel
+- ✅ **Atributos** - Dinámicos por producto
+- ✅ **Compras** - Registro con actualización de stock
+- ✅ **Proveedores** - Gestión de proveedores
+
+### Ventas y Servicio
+- ✅ **Ventas** - Con OCR para números de serie
+- ✅ **Garantías** - Seguimiento automático
+- ✅ **Servicio Técnico** - Estados y prioridades
+- ✅ **Reportes** - Estadísticas y análisis
+
+---
+
+## 🔐 Seguridad
+
+- **JWT**: Tokens de acceso (15 min) y refresh (7 días)
+- **Bcrypt**: Hashing de contraseñas con salt rounds
+- **Multi-tenant**: Aislamiento automático por `company_id`
+- **RBAC**: Roles: owner, admin, seller, inventory
+- **SQL Injection**: Prepared statements en todas las queries
+- **CORS**: Configuración restrictiva
+- **Rate Limiting**: Protección contra ataques
+
+---
+
+## 📊 Endpoints Principales
+
+### Autenticación
+```http
+POST   /api/v1/auth/register         # Registro
+POST   /api/v1/auth/login            # Login
+POST   /api/v1/auth/refresh          # Renovar token
+GET    /api/v1/auth/me               # Perfil actual
+```
+
+### Productos
+```http
+GET    /api/v1/products              # Listar productos
+POST   /api/v1/products              # Crear producto
+GET    /api/v1/products/:id          # Ver producto
+PUT    /api/v1/products/:id          # Actualizar producto
+DELETE /api/v1/products/:id          # Eliminar producto
+```
+
+### Atributos de Productos
+```http
+GET    /api/v1/products/:id/attributes              # Listar atributos
+POST   /api/v1/products/:id/attributes              # Crear atributo
+POST   /api/v1/products/:id/attributes/bulk         # Crear múltiples
+PUT    /api/v1/products/:id/attributes/:attrId      # Actualizar
+DELETE /api/v1/products/:id/attributes/:attrId      # Eliminar
+```
+
+### Categorías
+```http
+GET    /api/v1/categories            # Listar categorías
+POST   /api/v1/categories            # Crear categoría
+PUT    /api/v1/categories/:id        # Actualizar
+DELETE /api/v1/categories/:id        # Eliminar
+```
+
+**Ver documentación completa en [API_REFERENCE.md](API_REFERENCE.md)**
+
+---
+
+## 🧪 Testing Rápido
+
+### 1. Registrar Usuario y Crear Empresa
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@test.com",
+    "password": "password123",
+    "name": "Admin Test",
+    "companyName": "Mi Empresa",
+    "companyAddress": "Dirección 123"
+  }'
+```
+
+### 2. Crear Producto con Estado
+```bash
+curl -X POST http://localhost:3000/api/v1/products \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku": "PROD001",
+    "name": "Laptop Gaming",
+    "price": 1500,
+    "stock": 5,
+    "condition": "new"
+  }'
+```
+
+### 3. Agregar Atributos Dinámicos
+```bash
+curl -X POST http://localhost:3000/api/v1/products/PRODUCT_ID/attributes/bulk \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attributes": [
+      {"name": "Procesador", "value": "Intel i7"},
+      {"name": "RAM", "value": "16GB"},
+      {"name": "Almacenamiento", "value": "512GB SSD"}
+    ]
+  }'
+```
+
+---
+
+## 🎯 Casos de Uso Soportados
+
+### Tienda de Electrónica
+- Categorías: Computadoras → Componentes → RAM/SSD/etc
+- Atributos: Marca, Modelo, Capacidad, Velocidad
+- Estados: new, open_box
+
+### Tienda de Ropa
+- Categorías: Ropa → Hombre/Mujer → Camisas/Pantalones
+- Atributos: Talla, Color, Material, Marca
+- Estados: new, used
+
+### Ferretería
+- Categorías: Herramientas → Eléctricas/Manuales
+- Atributos: Voltaje, Potencia, Peso, Marca
+- Estados: new, open_box
+
+### Marketplace General
+- Categorías jerárquicas ilimitadas
+- Atributos totalmente personalizables
+- Todos los estados disponibles
+
+---
+
+## 🛠️ Desarrollo
+
+### Estructura del Proyecto
+```
+Backend/
+├── database/
+│   └── init.sql                 # Schema inicial completo
+├── migrations/
+│   └── add-product-improvements.sql  # Migración v1.1
+├── src/
+│   ├── config/                  # Configuraciones
+│   ├── controllers/             # Lógica de negocio
+│   ├── middlewares/             # Auth, validación, errores
+│   ├── models/                  # Modelos de datos
+│   ├── routes/                  # Definición de rutas
+│   ├── services/                # Servicios externos
+│   ├── utils/                   # Utilidades
+│   ├── validations/             # Schemas Zod
+│   └── server.js                # Entry point
+├── docs/                        # Documentación
+└── package.json
+```
+
+### Scripts Disponibles
+```bash
+npm run dev          # Modo desarrollo (nodemon)
+npm start            # Modo producción
+npm test             # Ejecutar tests
+npm run lint         # Verificar código
+```
+
+---
+
+## 🔄 Roadmap
+
+### v1.2.0 (Próxima)
+- [ ] Sistema de notificaciones en tiempo real
+- [ ] Reportes avanzados con gráficos
+- [ ] Exportación a PDF/Excel
+- [ ] Dashboard personalizable
+- [ ] Múltiples monedas
+
+### v2.0.0 (Futuro)
+- [ ] Integración con WhatsApp Business
+- [ ] App móvil (React Native)
+- [ ] Sistema de facturación electrónica
+- [ ] Integración con marketplaces
+- [ ] BI y análisis predictivo
+
+---
+
+## 🐛 Troubleshooting
+
+### Error: "Cannot connect to database"
+```bash
+# Verificar variables de entorno
+cat .env | grep DB_
+
+# Verificar conexión a Supabase
+psql "postgresql://user:pass@host:5432/dbname"
+```
+
+### Error: "JWT token expired"
+```bash
+# Refrescar token
+curl -X POST http://localhost:3000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken": "YOUR_REFRESH_TOKEN"}'
+```
+
+### Error: "Port 3000 already in use"
+```bash
+# Windows
+netstat -ano | findstr :3000
+taskkill /PID <PID> /F
+
+# Linux/Mac
+lsof -ti:3000 | xargs kill -9
+```
+
+---
+
+## 📞 Soporte
+
+- **Documentación**: [docs/](.)
+- **Issues**: GitHub Issues
+- **Contacto**: [Tu email]
+
+---
 
 ## 📄 Licencia
 
-Este proyecto es propiedad de Stockly. Todos los derechos reservados.
+Copyright © 2025 Stockly. Todos los derechos reservados.
+
+---
+
+**¿Listo para empezar?** 👉 Ve a **[SETUP.md](SETUP.md)** para configurar tu entorno.

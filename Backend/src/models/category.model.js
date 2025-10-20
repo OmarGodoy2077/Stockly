@@ -11,19 +11,20 @@ class CategoryModel {
      * @param {Object} categoryData - Category data
      * @returns {Promise<Object>} Created category
      */
-    static async create({ companyId, name, description }) {
+    static async create({ companyId, name, description, parentId = null }) {
         try {
             const query = `
-                INSERT INTO categories (company_id, name, description)
-                VALUES ($1, $2, $3)
+                INSERT INTO categories (company_id, name, description, parent_id)
+                VALUES ($1, $2, $3, $4)
                 RETURNING *
             `;
 
-            const result = await database.query(query, [companyId, name, description]);
+            const result = await database.query(query, [companyId, name, description, parentId]);
 
             logger.business('category_created', 'category', result.rows[0].id, {
                 companyId,
-                name
+                name,
+                parentId
             });
 
             return result.rows[0];
@@ -104,7 +105,7 @@ class CategoryModel {
      */
     static async update(categoryId, companyId, updates) {
         try {
-            const allowedFields = ['name', 'description'];
+            const allowedFields = ['name', 'description', 'parent_id'];
             const fields = [];
             const values = [];
             let paramCount = 1;

@@ -18,6 +18,7 @@ import { requestLogger } from './middlewares/request.middleware.js';
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
 import companyRoutes from './routes/company.routes.js';
+import invitationRoutes from './routes/invitation.routes.js';
 import productRoutes from './routes/product.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import saleRoutes from './routes/sale.routes.js';
@@ -158,6 +159,7 @@ class StocklyServer {
         this.app.use('/api/v1/auth', authRoutes);
         this.app.use('/api/v1/users', userRoutes);
         this.app.use('/api/v1/companies', companyRoutes);
+        this.app.use('/api/v1/invitations', invitationRoutes);
         this.app.use('/api/v1/products', productRoutes);
         this.app.use('/api/v1/categories', categoryRoutes);
         this.app.use('/api/v1/sales', saleRoutes);
