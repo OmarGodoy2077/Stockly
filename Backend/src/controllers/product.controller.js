@@ -87,7 +87,9 @@ class ProductController {
                 sku: req.body.sku,
                 name: req.body.name,
                 description: req.body.description,
-                price: parseFloat(req.body.price),
+                price: req.body.price !== undefined && req.body.price !== null 
+                    ? parseFloat(req.body.price) 
+                    : 0, // Price is now optional, defaults to 0
                 stock: parseInt(req.body.stock) || 0,
                 minStock: parseInt(req.body.min_stock) || 5,
                 imageUrl: req.body.image_url,
@@ -101,7 +103,8 @@ class ProductController {
                 productId: product.id,
                 companyId: req.companyId,
                 sku: product.sku,
-                condition: product.condition
+                condition: product.condition,
+                hasPrice: req.body.price !== undefined
             });
 
             ResponseHandler.success(res, product, 'Product created successfully', 201);
@@ -258,6 +261,76 @@ class ProductController {
 
         } catch (error) {
             ResponseHandler.handleError(res, error, 'ProductController.getStatistics');
+        }
+    }
+
+    /**
+     * Get complete stock summary
+     * GET /api/v1/products/stock/complete
+     */
+    static async getCompleteStock(req, res) {
+        try {
+            const {
+                category,
+                search,
+                min_stock_only = false,
+                sort_by = 'name',
+                sort_order = 'ASC'
+            } = req.query;
+
+            const filters = {
+                companyId: req.companyId,
+                categoryId: category,
+                search,
+                limit: 10000 // Get all products
+            };
+
+            const result = await ProductModel.getByCompany(filters);
+
+            // Process and consolidate stock
+            const stockSummary = result.products
+                .filter(product => {
+                    if (min_stock_only) {
+                        return product.stock <= product.min_stock;
+                    }
+                    return true;
+                })
+                .map(product => ({
+                    id: product.id,
+                    sku: product.sku,
+                    name: product.name,
+                    category: product.category_name,
+                    current_stock: product.stock,
+                    min_stock: product.min_stock,
+                    stock_status: product.stock_status,
+                    price: product.price,
+                    stock_value: product.stock * product.price,
+                    condition: product.condition,
+                    created_at: product.created_at
+                }));
+
+            // Calculate totals
+            const totals = {
+                total_items: stockSummary.reduce((sum, p) => sum + p.current_stock, 0),
+                total_value: stockSummary.reduce((sum, p) => sum + p.stock_value, 0),
+                products_count: stockSummary.length,
+                low_stock_count: stockSummary.filter(p => p.stock_status === 'low').length,
+                out_of_stock_count: stockSummary.filter(p => p.stock_status === 'out').length
+            };
+
+            logger.business('stock_complete_viewed', 'product', req.user.id, {
+                companyId: req.companyId,
+                productsCount: stockSummary.length,
+                totalValue: totals.total_value
+            });
+
+            ResponseHandler.success(res, {
+                summary: totals,
+                products: stockSummary
+            }, 'Complete stock summary retrieved successfully');
+
+        } catch (error) {
+            ResponseHandler.handleError(res, error, 'ProductController.getCompleteStock');
         }
     }
 

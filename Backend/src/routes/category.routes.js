@@ -22,6 +22,20 @@ router.get('/', checkResourcePermission('category', 'read'), CategoryController.
 
 /**
  * @swagger
+ * /api/v1/categories/tree:
+ *   get:
+ *     summary: Get category hierarchy as tree structure
+ *     tags: [Categories]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Category tree with hierarchy
+ */
+router.get('/tree', checkResourcePermission('category', 'read'), CategoryController.getTree);
+
+/**
+ * @swagger
  * /api/v1/categories:
  *   post:
  *     summary: Create new category

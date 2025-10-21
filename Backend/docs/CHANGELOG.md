@@ -1,20 +1,113 @@
-# 📋 Changelog - Stockly Backend# 📋 Listado Completo de Cambios - Stockly v1.1.0
+# 📋 Changelog - Stockly Backend
 
+Todos los cambios notables en este proyecto serán documentados en este archivo.
 
-
-Todos los cambios notables en este proyecto serán documentados en este archivo.**Fecha:** 20 de Octubre, 2025  
-
-**Versión:** 1.1.0  
-
-El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),**Status:** ✅ Completado
-
+El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
----
+## [1.2.0] - 2025-10-20 (NUEVO)
 
-## 📊 Resumen de Cambios
+### ✨ Añadido
+
+#### Tracking de Profit en Compras
+- Campos `cost_amount`, `sell_amount`, `profit_amount`, `profit_margin_percent` en tabla `purchases`
+- Función trigger `calculate_purchase_profit()` para cálculo automático de ganancias
+- Vistas `purchase_profit_analysis` y `monthly_purchase_profit_summary` para análisis
+- Cálculos automáticos: ganancia = (sell_amount - cost_amount), margen = (ganancia / cost_amount) * 100
+
+#### Rutas Mejoradas de Productos
+- `GET /products/stock/complete` - Resumen consolidado de stock con valores totales
+  - Incluye: cantidad total, valor total, estado por producto
+  - Filtros: categoría, búsqueda, solo bajo stock
+- `POST /products` - Precio OPCIONAL (antes era obligatorio)
+  - Los productos se pueden agregar sin precio y actualizarse después
+
+#### Categorías Jerárquicas
+- `GET /categories/tree` - Estructura de árbol jerárquico de categorías
+  - Retorna categorías con sus subcategorías anidadas
+  - Soporta N niveles de profundidad
+
+#### Ventas Completas con OCR
+- `POST /sales` - Venta con soporte OCR para extracción de serial number
+- `GET /sales` - Listar todas las ventas con filtros
+- `GET /sales/:id` - Obtener detalles de venta específica
+- `PUT /sales/:id` - Actualizar venta
+- `DELETE /sales/:id` - Eliminar venta
+- `GET /sales/statistics` - Estadísticas de ventas
+
+#### Resumen Ejecutivo: Costo vs Facturación
+- `GET /reports/cost-vs-revenue` - Resumen ejecutivo completo
+  - Análisis: costo total, facturación actual, ganancia proyectada
+  - Margen de ganancia con cálculos automáticos
+  - Desglose mensual opcional
+  - Formatos: JSON, Excel (próximamente), PDF (próximamente)
+
+### 🔧 Modificado
+
+#### Base de Datos
+- `purchases` table: Agregados 5 campos (cost_amount, sell_amount, profit_amount, profit_margin_percent, updated_at)
+- `init.sql`: Actualizado con estructura completa incluyendo profit tracking
+- Nuevos índices: idx_purchases_cost_amount, idx_purchases_profit_amount, idx_purchases_profit_margin, idx_purchases_updated_at
+
+#### Controllers
+- `ProductController.create()` - Precio ahora es OPCIONAL (default: 0)
+- `ProductController.getCompleteStock()` - NUEVO método
+- `PurchaseController.create()` - Agregada lógica de cálculo de profit
+- `ReportController.generateCostVsRevenueReport()` - NUEVO método
+- `CategoryController.getTree()` - NUEVO método
+- `SaleController` - Todos los métodos están completamente implementados
+
+#### Routes
+- `product.routes.js`: Agregada ruta `/stock/complete` ANTES de `/:id`
+- `category.routes.js`: Agregada ruta `/tree` ANTES de `/:id` para evitar conflictos
+- `sale.routes.js`: Completamente reescrita con todas las rutas CRUD + OCR
+- `report.routes.js`: Agregada ruta `/cost-vs-revenue` para resumen ejecutivo
+
+#### Models
+- `PurchaseModel.create()` - Agregados parámetros costAmount y sellAmount
+  - Cálculo automático de profit y margen
+- `init.sql` - Triggers actualizados para purchases
+
+### 📊 Resumen de Cambios
+
+| Categoría | Cantidad | Estado |
+|-----------|----------|--------|
+| Archivos Nuevos | 1 | ✅ |
+| Archivos Modificados | 8 | ✅ |
+| Rutas Nuevas | 10+ | ✅ |
+| Campos BD Nuevos | 5 | ✅ |
+| Views Nuevas | 2 | ✅ |
+| Triggers Nuevos | 1 | ✅ |
+| Índices Nuevos | 4 | ✅ |
+
+### 🔄 Cambios Relacionados
+
+#### migrations/add-purchase-profit-tracking.sql
+- Nueva migración para sistemas ya en producción
+- Incluye: ALTER TABLE, triggers, views, índices
+- Script de reversión NO incluida (datos son críticos)
+
+#### Documentation
+- `ARCHITECTURE.md`: Actualizado con campos de profit en purchases
+- `API_REFERENCE.md`: Versión 1.2.0, nuevas 5 secciones destacadas
+- `SETUP.md`: Sin cambios (configuración igual)
+
+### ⚠️ Breaking Changes
+- NINGUNO - Totalmente backwards compatible
+- El precio en productos es ahora OPCIONAL (antes obligatorio)
+
+### � Bugs Fijos
+- Rutas de venta estaban retornando 501 (no implementado)
+- Precio obligatorio limitaba flexibilidad en registro de productos
+
+### 📈 Performance
+- Nuevos índices en purchases mejoran queries de profit analysis
+- Views materializadas para reportes rápidos
+- Trigger automático elimina cálculos en aplicación
+
+---
 
 ## [1.1.0] - 2025-10-20
 

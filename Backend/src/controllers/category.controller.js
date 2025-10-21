@@ -28,6 +28,63 @@ class CategoryController {
     }
 
     /**
+     * Get category hierarchy as tree
+     * GET /api/v1/categories/tree
+     */
+    static async getTree(req, res) {
+        try {
+            const categories = await CategoryModel.getByCompany(req.companyId);
+            
+            // Build tree structure
+            const tree = this.buildCategoryTree(categories);
+
+            logger.business('category_tree_viewed', 'category', req.user.id, {
+                companyId: req.companyId,
+                count: categories.length
+            });
+
+            ResponseHandler.success(res, {
+                tree,
+                total: categories.length
+            }, 'Category tree retrieved successfully');
+
+        } catch (error) {
+            ResponseHandler.handleError(res, error, 'CategoryController.getTree');
+        }
+    }
+
+    /**
+     * Build category tree from flat list
+     * @private
+     */
+    static buildCategoryTree(categories) {
+        const categoryMap = new Map();
+        const roots = [];
+
+        // Create a map for quick lookup
+        categories.forEach(cat => {
+            categoryMap.set(cat.id, {
+                ...cat,
+                children: []
+            });
+        });
+
+        // Build tree relationships
+        categories.forEach(cat => {
+            if (cat.parent_id) {
+                const parent = categoryMap.get(cat.parent_id);
+                if (parent) {
+                    parent.children.push(categoryMap.get(cat.id));
+                }
+            } else {
+                roots.push(categoryMap.get(cat.id));
+            }
+        });
+
+        return roots;
+    }
+
+    /**
      * Get category by ID
      * GET /api/v1/categories/:id
      */

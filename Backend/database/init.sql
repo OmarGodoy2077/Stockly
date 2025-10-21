@@ -174,11 +174,16 @@ CREATE TABLE IF NOT EXISTS purchases (
     supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
     invoice_number VARCHAR(100),
     supplier_name VARCHAR(255), -- In case supplier is not in suppliers table
-    products JSONB NOT NULL, -- Array of {product_id, quantity, unit_price}
+    products JSONB NOT NULL, -- Array of {product_id, quantity, unit_price, cost_per_unit, sell_price_per_unit, profit_per_unit}
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    cost_amount DECIMAL(10,2) DEFAULT 0, -- Total cost of purchase
+    sell_amount DECIMAL(10,2) DEFAULT 0, -- Potential revenue if all items sold at recorded price
+    profit_amount DECIMAL(10,2) DEFAULT 0, -- Calculated profit (sell_amount - cost_amount)
+    profit_margin_percent DECIMAL(5,2) DEFAULT 0, -- Profit margin percentage
     purchase_date DATE NOT NULL DEFAULT CURRENT_DATE,
     notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Sales table - Main sales records
@@ -309,6 +314,16 @@ CREATE INDEX IF NOT EXISTS idx_sales_user_id ON sales(user_id);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date);
 CREATE INDEX IF NOT EXISTS idx_sales_serial_number ON sales(serial_number);
 
+-- Purchases indexes
+CREATE INDEX IF NOT EXISTS idx_purchases_company_id ON purchases(company_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_user_id ON purchases(user_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_supplier_id ON purchases(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_date ON purchases(purchase_date);
+CREATE INDEX IF NOT EXISTS idx_purchases_cost_amount ON purchases(cost_amount);
+CREATE INDEX IF NOT EXISTS idx_purchases_profit_amount ON purchases(profit_amount);
+CREATE INDEX IF NOT EXISTS idx_purchases_profit_margin ON purchases(profit_margin_percent);
+CREATE INDEX IF NOT EXISTS idx_purchases_updated_at ON purchases(updated_at);
+
 -- Warranties indexes
 CREATE INDEX IF NOT EXISTS idx_warranties_company_id ON warranties(company_id);
 CREATE INDEX IF NOT EXISTS idx_warranties_serial ON warranties(serial_number);
@@ -348,6 +363,33 @@ CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON companies FOR EACH R
 CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_service_histories_updated_at BEFORE UPDATE ON service_histories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_purchases_updated_at BEFORE UPDATE ON purchases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to calculate purchase profit and margin
+CREATE OR REPLACE FUNCTION calculate_purchase_profit()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- If cost_amount and sell_amount are both set, calculate profit
+    IF NEW.cost_amount > 0 AND NEW.sell_amount > 0 THEN
+        NEW.profit_amount := NEW.sell_amount - NEW.cost_amount;
+        -- Profit margin = (profit / sell_amount) * 100
+        -- Example: cost=70, sell=100, profit=30 → margin = (30/100)*100 = 30%
+        NEW.profit_margin_percent := (NEW.profit_amount / NEW.sell_amount) * 100;
+    ELSIF NEW.cost_amount > 0 THEN
+        NEW.profit_amount := 0;
+        NEW.profit_margin_percent := 0;
+    END IF;
+    
+    NEW.updated_at := NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger for purchase profit calculation
+CREATE TRIGGER trigger_calculate_purchase_profit
+BEFORE INSERT OR UPDATE ON purchases
+FOR EACH ROW
+EXECUTE FUNCTION calculate_purchase_profit();
 
 -- Trigger for product attributes updated_at
 CREATE OR REPLACE FUNCTION update_product_attributes_updated_at()
@@ -659,6 +701,55 @@ SELECT
 FROM service_histories sh
 JOIN companies c ON sh.company_id = c.id
 LEFT JOIN warranties w ON sh.warranty_id = w.id;
+
+-- Purchase profit analysis view
+CREATE OR REPLACE VIEW purchase_profit_analysis AS
+SELECT
+    p.id,
+    p.company_id,
+    p.user_id,
+    p.supplier_id,
+    p.supplier_name,
+    p.invoice_number,
+    p.cost_amount,
+    p.sell_amount,
+    p.profit_amount,
+    p.profit_margin_percent,
+    p.total_amount,
+    p.purchase_date,
+    p.created_at,
+    u.name as buyer_name,
+    u.email as buyer_email,
+    s.name as supplier_full_name,
+    c.name as company_name,
+    EXTRACT(DAYS FROM (NOW() - p.purchase_date)) as days_since_purchase,
+    CASE 
+        WHEN p.profit_margin_percent > 30 THEN 'Excellent'
+        WHEN p.profit_margin_percent > 15 THEN 'Good'
+        WHEN p.profit_margin_percent > 0 THEN 'Fair'
+        ELSE 'Poor or No Profit'
+    END as profit_status
+FROM purchases p
+LEFT JOIN users u ON p.user_id = u.id
+LEFT JOIN suppliers s ON p.supplier_id = s.id
+LEFT JOIN companies c ON p.company_id = c.id
+ORDER BY p.purchase_date DESC;
+
+-- Monthly purchase profit summary view
+CREATE OR REPLACE VIEW monthly_purchase_profit_summary AS
+SELECT
+    p.company_id,
+    DATE_TRUNC('month', p.purchase_date)::DATE as month,
+    COUNT(p.id) as total_purchases,
+    SUM(p.cost_amount) as total_cost,
+    SUM(p.sell_amount) as total_sell_value,
+    SUM(p.profit_amount) as total_profit,
+    AVG(p.profit_margin_percent) as avg_profit_margin,
+    MAX(p.profit_amount) as max_profit_purchase,
+    MIN(p.profit_amount) as min_profit_purchase
+FROM purchases p
+GROUP BY p.company_id, DATE_TRUNC('month', p.purchase_date)
+ORDER BY month DESC;
 
 -- =====================================================
 -- ROW LEVEL SECURITY (RLS) SETUP

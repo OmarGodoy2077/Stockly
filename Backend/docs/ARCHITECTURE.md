@@ -129,7 +129,7 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
        │            │
        │            │ 1:N
        ├─► ┌────────▼──────────────────┐
-       │   │      PURCHASES            │
+       │   │      PURCHASES            │  ✨ +profit tracking v1.2
        │   │───────────────────────────│
        │   │ id (PK)                   │
        │   │ company_id (FK)           │
@@ -137,6 +137,10 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
        │   │ invoice_number            │
        │   │ products (JSONB)          │  Array flexible
        │   │ total_amount              │
+       │   │ cost_amount ◄─────────────── Costo total de compra
+       │   │ sell_amount ◄──────────────  Ingresos potenciales
+       │   │ profit_amount ◄────────────  Ganancia calculada
+       │   │ profit_margin_percent     │  % margen
        │   │ purchase_date             │
        │   └───────────────────────────┘
        │
@@ -183,12 +187,16 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
 - idx_products_sku (sku) UNIQUE
 - idx_product_attributes_product_id (product_id)
 - idx_invitations_code (code) UNIQUE
+- idx_purchases_profit_amount (profit_amount)
+- idx_purchases_profit_margin (profit_margin_percent)
 
 VISTAS MATERIALIZADAS:
 - category_hierarchy: Árbol completo de categorías
 - products_with_attributes: Productos + atributos en JSON
 - low_stock_products: Productos bajo stock mínimo
 - expiring_warranties: Garantías próximas a vencer
+- purchase_profit_analysis: Análisis de rentabilidad por compra
+- monthly_purchase_profit_summary: Resumen mensual de ganancias
 ```
 
 ### Descripción de Entidades
@@ -224,8 +232,13 @@ VISTAS MATERIALIZADAS:
 - **Relaciones**: Puede tener historial de servicio
 
 #### Compras (purchases)
-- **Propósito**: Registro de entradas de inventario
-- **Campos clave**: `id`, `company_id`, `supplier`, `products`, `quantities`, `date`
+- **Propósito**: Registro de entradas de inventario con análisis de rentabilidad
+- **Campos clave**: `id`, `company_id`, `supplier`, `products`, `quantities`, `date`, `cost_amount`, `sell_amount`, `profit_amount`, `profit_margin_percent`
+- **Características nuevas v1.2**:
+  - Tracking automático de costos y ganancias
+  - Cálculo automático de margen de ganancia
+  - Vistas de análisis de rentabilidad
+  - Campos en productos JSONB: `cost_per_unit`, `sell_price_per_unit`, `profit_per_unit`
 
 #### Historial de Servicio (service_histories)
 - **Propósito**: Seguimiento de reparaciones y mantenimiento

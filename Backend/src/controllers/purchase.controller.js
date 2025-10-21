@@ -98,11 +98,15 @@ class PurchaseController {
                 return ResponseHandler.badRequest(res, 'Products array is required');
             }
 
-            // Calculate total amount
+            // Calculate total amounts with profit tracking
             let totalAmount = 0;
+            let costAmount = 0;
+            let sellAmount = 0;
             const processedProducts = products.map(product => {
                 const quantity = parseInt(product.quantity);
                 const unitPrice = parseFloat(product.unit_price);
+                const costPerUnit = parseFloat(product.cost_per_unit || 0);
+                const sellPricePerUnit = parseFloat(product.sell_price_per_unit || 0);
                 
                 if (isNaN(quantity) || quantity <= 0) {
                     throw new Error(`Invalid quantity for product ${product.product_id}`);
@@ -113,12 +117,24 @@ class PurchaseController {
 
                 const subtotal = quantity * unitPrice;
                 totalAmount += subtotal;
+                
+                // Calculate cost amount
+                const productCostTotal = quantity * costPerUnit;
+                costAmount += productCostTotal;
+                
+                // Calculate sell amount if provided
+                const productSellTotal = quantity * sellPricePerUnit;
+                sellAmount += productSellTotal;
 
                 return {
                     product_id: product.product_id,
                     quantity,
                     unit_price: unitPrice,
-                    subtotal
+                    cost_per_unit: costPerUnit,
+                    sell_price_per_unit: sellPricePerUnit,
+                    subtotal,
+                    cost_total: productCostTotal,
+                    sell_total: productSellTotal
                 };
             });
 
@@ -130,6 +146,8 @@ class PurchaseController {
                 invoiceNumber: invoice_number,
                 products: processedProducts,
                 totalAmount,
+                costAmount,
+                sellAmount,
                 purchaseDate: purchase_date || new Date().toISOString().split('T')[0],
                 notes
             };

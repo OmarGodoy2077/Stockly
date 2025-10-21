@@ -234,4 +234,44 @@ router.get('/warranties', requireInventoryAccess, ReportController.generateWarra
  */
 router.get('/services', requireInventoryAccess, ReportController.generateServiceReport);
 
+/**
+ * @swagger
+ * /api/v1/reports/cost-vs-revenue:
+ *   get:
+ *     summary: Generate executive summary - Cost vs Revenue
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: start_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (YYYY-MM-DD)
+ *       - in: query
+ *         name: end_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (YYYY-MM-DD)
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum: [json, excel, pdf]
+ *         default: json
+ *         description: Report format
+ *       - in: query
+ *         name: include_monthly_breakdown
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include monthly breakdown in report
+ *     responses:
+ *       200:
+ *         description: Executive summary generated successfully
+ */
+router.get('/cost-vs-revenue', requireInventoryAccess, ReportController.generateCostVsRevenueReport);
+
 export default router;

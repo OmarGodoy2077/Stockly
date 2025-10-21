@@ -86,6 +86,38 @@ router.get('/low-stock', requireInventoryAccess, ProductController.getLowStock);
 
 /**
  * @swagger
+ * /api/v1/products/stock/complete:
+ *   get:
+ *     summary: Get complete stock summary with consolidation
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by category ID
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search in product name or SKU
+ *       - in: query
+ *         name: min_stock_only
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Show only low stock items
+ *     responses:
+ *       200:
+ *         description: Complete stock summary retrieved successfully
+ */
+router.get('/stock/complete', requireInventoryAccess, ProductController.getCompleteStock);
+
+/**
+ * @swagger
  * /api/v1/products/statistics:
  *   get:
  *     summary: Get product statistics

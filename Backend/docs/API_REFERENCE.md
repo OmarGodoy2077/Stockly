@@ -1,6 +1,6 @@
 # 📡 Referencia de API - Stockly Backend
 
-**Versión:** 1.1.0  
+**Versión:** 1.2.0 (Actualizado Oct 2025)  
 **Base URL:** `http://localhost:3001/api/v1`  
 **Producción:** `https://tu-dominio.com/api/v1`
 
@@ -21,6 +21,7 @@
 11. [Garantías](#garantías)
 12. [Servicio Técnico](#servicio-técnico)
 13. [Reportes](#reportes)
+14. [Nuevas Rutas v1.2 (Destacadas)](#-nuevas-rutas-v12---destac
 
 ---
 
@@ -1256,6 +1257,274 @@ curl -X POST http://localhost:3001/api/v1/purchases \
   }'
 
 # Stock se actualiza automáticamente
+```
+
+---
+
+## ✨ Nuevas Rutas v1.2 - Destacadas
+
+### 1️⃣ Categorías Jerárquicas
+
+#### GET `/categories/tree`
+Obtener estructura jerárquica de categorías (árbol).
+
+**Parámetros:** Ninguno
+
+**Respuesta (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "tree": [
+      {
+        "id": "uuid-cat-1",
+        "name": "Electrónica",
+        "description": "Productos electrónicos",
+        "parent_id": null,
+        "is_active": true,
+        "created_at": "2025-10-20T10:00:00Z",
+        "children": [
+          {
+            "id": "uuid-cat-2",
+            "name": "Computadoras",
+            "parent_id": "uuid-cat-1",
+            "children": [
+              {
+                "id": "uuid-cat-3",
+                "name": "Laptops",
+                "parent_id": "uuid-cat-2",
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "total": 5
+  }
+}
+```
+
+**Ejemplo curl:**
+```bash
+curl -X GET http://localhost:3001/api/v1/categories/tree \
+  -H "Authorization: Bearer {token}"
+```
+
+---
+
+### 2️⃣ Stock Completo Consolidado
+
+#### GET `/products/stock/complete`
+Obtener resumen completo de stock con valores consolidados.
+
+**Parámetros:**
+- `category` (uuid, opcional) - Filtrar por categoría
+- `search` (string, opcional) - Buscar por nombre o SKU
+- `min_stock_only` (boolean, default: false) - Solo productos bajo stock mínimo
+
+**Respuesta (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "total_items": 450,
+      "total_value": 125000.00,
+      "products_count": 25,
+      "low_stock_count": 5,
+      "out_of_stock_count": 2
+    },
+    "products": [
+      {
+        "id": "uuid-prod-1",
+        "sku": "TV001",
+        "name": "Televisor LED 42\"",
+        "category": "Electrónica",
+        "current_stock": 15,
+        "min_stock": 5,
+        "stock_status": "available",
+        "price": 2500.00,
+        "stock_value": 37500.00,
+        "condition": "new",
+        "created_at": "2025-09-15T10:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+**Ejemplo curl:**
+```bash
+curl -X GET "http://localhost:3001/api/v1/products/stock/complete?min_stock_only=false" \
+  -H "Authorization: Bearer {token}"
+```
+
+---
+
+### 3️⃣ Compras con Tracking de Profit
+
+#### POST `/purchases`
+Crear compra CON campos de costo y ganancia.
+
+**Body (MEJORADO v1.2):**
+```json
+{
+  "supplier_id": "uuid-supplier",
+  "supplier_name": "Proveedor Tech",
+  "invoice_number": "INV-2025-001",
+  "products": [
+    {
+      "product_id": "uuid-prod-1",
+      "quantity": 10,
+      "unit_price": 2000.00,
+      "cost_per_unit": 1800.00,
+      "sell_price_per_unit": 2500.00
+    }
+  ],
+  "purchase_date": "2025-10-20",
+  "notes": "Compra con margen de 27.8%"
+}
+```
+
+**Respuesta (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-purchase-1",
+    "company_id": "uuid-company",
+    "invoice_number": "INV-2025-001",
+    "total_amount": 20000.00,
+    "cost_amount": 18000.00,
+    "sell_amount": 25000.00,
+    "profit_amount": 7000.00,
+    "profit_margin_percent": 38.89,
+    "purchase_date": "2025-10-20",
+    "products": [
+      {
+        "product_id": "uuid-prod-1",
+        "quantity": 10,
+        "unit_price": 2000.00,
+        "cost_per_unit": 1800.00,
+        "sell_price_per_unit": 2500.00,
+        "cost_total": 18000.00,
+        "sell_total": 25000.00
+      }
+    ],
+    "created_at": "2025-10-20T10:30:00Z"
+  }
+}
+```
+
+---
+
+### 4️⃣ Ventas Completas con OCR
+
+#### POST `/sales`
+Crear venta CON extracción de número de serie (OCR).
+
+**Body:**
+```json
+{
+  "customer_name": "Cliente Premium",
+  "customer_email": "cliente@example.com",
+  "customer_phone": "+502 7123 4567",
+  "products": [
+    {
+      "product_id": "uuid-prod-1",
+      "quantity": 1,
+      "unit_price": 2500.00
+    }
+  ],
+  "warranty_months": 24,
+  "payment_method": "credit_card",
+  "serial_image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB...",
+  "notes": "Venta especial con OCR"
+}
+```
+
+**Respuesta (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-sale-1",
+    "company_id": "uuid-company",
+    "customer_name": "Cliente Premium",
+    "serial_number": "SN1234567890",
+    "serial_image_url": "https://res.cloudinary.com/...",
+    "total_amount": 2800.00,
+    "warranty_months": 24,
+    "sale_date": "2025-10-20T11:00:00Z",
+    "warranty": {
+      "id": "uuid-warranty-1",
+      "serial_number": "SN1234567890",
+      "expires_at": "2027-10-20",
+      "is_active": true
+    }
+  }
+}
+```
+
+**Nota:** El OCR es OPCIONAL. Si no se proporciona `serial_image`, se puede ingresar manualmente.
+
+---
+
+### 5️⃣ Resumen Ejecutivo: Costo vs Facturación
+
+#### GET `/reports/cost-vs-revenue`
+Resumen ejecutivo con análisis de costo vs ingresos.
+
+**Parámetros:**
+- `start_date` (date, opcional) - Filtro desde
+- `end_date` (date, opcional) - Filtro hasta
+- `include_monthly_breakdown` (boolean, default: true) - Incluir desglose mensual
+- `format` (enum: json|excel|pdf, default: json)
+
+**Respuesta (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "period": {
+      "start_date": "2025-10-01",
+      "end_date": "2025-10-31"
+    },
+    "cost_summary": {
+      "total_purchase_cost": 85000.00,
+      "total_purchases": 12,
+      "avg_purchase_cost": 7083.33
+    },
+    "revenue_summary": {
+      "total_actual_revenue": 145000.00,
+      "total_sales": 28,
+      "avg_sale_amount": 5178.57,
+      "total_potential_revenue": 155000.00
+    },
+    "profit_analysis": {
+      "projected_profit": 70000.00,
+      "actual_gain": 60000.00,
+      "profit_margin_percent": 82.35,
+      "avg_profit_margin_percent": 42.15
+    },
+    "monthly_breakdown": [
+      {
+        "month": "2025-10-01",
+        "cost": 85000.00,
+        "revenue": 145000.00,
+        "gain": 60000.00,
+        "margin_percent": 70.59
+      }
+    ]
+  }
+}
+```
+
+**Ejemplo curl:**
+```bash
+curl -X GET "http://localhost:3001/api/v1/reports/cost-vs-revenue?start_date=2025-10-01&end_date=2025-10-31&format=json" \
+  -H "Authorization: Bearer {token}"
 ```
 
 ---

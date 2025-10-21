@@ -19,22 +19,35 @@ class PurchaseModel {
         invoiceNumber = null,
         products,
         totalAmount,
+        costAmount = 0,
+        sellAmount = 0,
         purchaseDate,
         notes = null
     }) {
         try {
+            // Calculate profit if both cost and sell amounts are provided
+            let profitAmount = 0;
+            let profitMarginPercent = 0;
+            
+            if (costAmount > 0 && sellAmount > 0) {
+                profitAmount = sellAmount - costAmount;
+                profitMarginPercent = (profitAmount / costAmount) * 100;
+            }
+
             const query = `
                 INSERT INTO purchases (
                     company_id, user_id, supplier_id, supplier_name,
-                    invoice_number, products, total_amount, purchase_date, notes
+                    invoice_number, products, total_amount, cost_amount, sell_amount,
+                    profit_amount, profit_margin_percent, purchase_date, notes
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 RETURNING *
             `;
 
             const result = await database.query(query, [
                 companyId, userId, supplierId, supplierName,
                 invoiceNumber, JSON.stringify(products), totalAmount,
+                costAmount, sellAmount, profitAmount, profitMarginPercent,
                 purchaseDate, notes
             ]);
 
@@ -43,6 +56,9 @@ class PurchaseModel {
                 userId,
                 supplierName,
                 totalAmount,
+                costAmount,
+                sellAmount,
+                profitAmount,
                 productCount: products.length
             });
 
