@@ -2,7 +2,7 @@
 
 ## 🎯 Visión General
 
-Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión integral de inventario, ventas y servicio técnico para emprendedores en LATAM. El sistema utiliza una arquitectura modular y escalable basada en Node.js con Express.
+Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión integral de inventario, ventas, recibos y servicio técnico para emprendedores en LATAM. El sistema utiliza una arquitectura modular y escalable basada en Node.js con Express.
 
 ## 🏗️ Arquitectura General
 
@@ -12,11 +12,12 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
 │   (Next.js)     │    │   (Node.js)     │    │   (Supabase)    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │
-                              ▼
-                       ┌─────────────────┐
-                       │  Firebase       │
-                       │  Storage        │
-                       └─────────────────┘
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+            ┌─────────────────┐  ┌─────────────────┐
+            │   Cloudinary    │  │  Firebase       │
+            │   (PDFs, IMG)   │  │  Storage        │
+            └─────────────────┘  └─────────────────┘
 ```
 
 ### Tecnologías Principales
@@ -30,7 +31,8 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
 | Validación | Zod | 3+ | Validación de datos |
 | Logging | Winston | 3+ | Registro de eventos |
 | OCR | Tesseract.js | 5+ | Extracción de números de serie |
-| Almacenamiento | Firebase Storage | 12+ | Archivos e imágenes |
+| PDF Generation | jsPDF | 3+ | Generación de recibos |
+| Almacenamiento | Cloudinary | - | Imágenes, PDFs y archivos |
 
 ## 🏢 Modelo de Datos
 
@@ -156,6 +158,34 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
        │   │ warranty_months           │
        │   └───────────────────────────┘
        │                │
+       │                ├─► ┌────────────────────────┐
+       │                │   │    INVOICES            │  ✨ NUEVO v1.3
+       │                │   │────────────────────────│
+       │                │   │ id (PK)                │
+       │                │   │ sale_id (FK)           │
+       │                │   │ invoice_number ◄───────── INV-2025-00001
+       │                │   │ invoice_date           │
+       │                │   │ customer_name          │
+       │                │   │ total_amount           │
+       │                │   │ is_draft ◄─────────────── Borrador|Finalizado
+       │                │   │ pdf_url                │  Cloudinary
+       │                │   │ payment_status         │
+       │                │   └────────────────────────┘
+       │                │            │
+       │                │            │ 1:N
+       │                │            └─► ┌──────────────────────┐
+       │                │                 │ INVOICE_LINE_ITEMS   │
+       │                │                 │──────────────────────│
+       │                │                 │ id (PK)              │
+       │                │                 │ invoice_id (FK)      │
+       │                │                 │ item_type ◄──────────── product|shipping|
+       │                │                 │ item_name            │  commission|discount
+       │                │                 │ quantity             │
+       │                │                 │ unit_price           │
+       │                │                 │ line_total           │  Auto-calculado
+       │                │                 │ is_taxable           │
+       │                │                 └──────────────────────┘
+       │                │
        │                │ 1:1
        │                └─► ┌───────────────────────┐
        │                    │    WARRANTIES         │
@@ -189,6 +219,9 @@ Stockly Backend es una aplicación SaaS multi-tenant diseñada para la gestión 
 - idx_invitations_code (code) UNIQUE
 - idx_purchases_profit_amount (profit_amount)
 - idx_purchases_profit_margin (profit_margin_percent)
+- idx_invoices_invoice_number (company_id, invoice_number) UNIQUE ✨ v1.3
+- idx_invoices_year_sequence (company_id, invoice_year, invoice_sequence) UNIQUE ✨ v1.3
+- idx_invoice_line_items_invoice_id (invoice_id) ✨ v1.3
 
 VISTAS MATERIALIZADAS:
 - category_hierarchy: Árbol completo de categorías
@@ -196,6 +229,8 @@ VISTAS MATERIALIZADAS:
 - low_stock_products: Productos bajo stock mínimo
 - expiring_warranties: Garantías próximas a vencer
 - purchase_profit_analysis: Análisis de rentabilidad por compra
+- invoices_with_details: Recibos con totales y estados ✨ v1.3
+- invoice_line_items_detail: Items desglosados con productos ✨ v1.3
 - monthly_purchase_profit_summary: Resumen mensual de ganancias
 ```
 

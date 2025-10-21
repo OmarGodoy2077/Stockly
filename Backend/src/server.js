@@ -23,6 +23,7 @@ import productRoutes from './routes/product.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import saleRoutes from './routes/sale.routes.js';
 import purchaseRoutes from './routes/purchase.routes.js';
+import invoiceRoutes from './routes/invoice.routes.js';
 import warrantyRoutes from './routes/warranty.routes.js';
 import serviceRoutes from './routes/service.routes.js';
 import supplierRoutes from './routes/supplier.routes.js';
@@ -164,6 +165,7 @@ class StocklyServer {
         this.app.use('/api/v1/categories', categoryRoutes);
         this.app.use('/api/v1/sales', saleRoutes);
         this.app.use('/api/v1/purchases', purchaseRoutes);
+        this.app.use('/api/v1/invoices', invoiceRoutes);
         this.app.use('/api/v1/warranties', warrantyRoutes);
         this.app.use('/api/v1/services', serviceRoutes);
         this.app.use('/api/v1/suppliers', supplierRoutes);
@@ -194,6 +196,7 @@ class StocklyServer {
                     categories: '/api/v1/categories',
                     sales: '/api/v1/sales',
                     purchases: '/api/v1/purchases',
+                    invoices: '/api/v1/invoices',
                     warranties: '/api/v1/warranties',
                     services: '/api/v1/services',
                     suppliers: '/api/v1/suppliers'

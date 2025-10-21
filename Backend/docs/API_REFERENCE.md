@@ -1,6 +1,6 @@
 # 📡 Referencia de API - Stockly Backend
 
-**Versión:** 1.2.0 (Actualizado Oct 2025)  
+**Versión:** 1.3.0 (Actualizado Oct 2025)  
 **Base URL:** `http://localhost:3001/api/v1`  
 **Producción:** `https://tu-dominio.com/api/v1`
 
@@ -18,10 +18,11 @@
 8. [Compras](#compras)
 9. [Proveedores](#proveedores)
 10. [Ventas](#ventas)
-11. [Garantías](#garantías)
-12. [Servicio Técnico](#servicio-técnico)
-13. [Reportes](#reportes)
-14. [Nuevas Rutas v1.2 (Destacadas)](#-nuevas-rutas-v12---destac
+11. [Invoices/Recibos](#invoicesrecibos) ⭐ NUEVO v1.3
+12. [Garantías](#garantías)
+13. [Servicio Técnico](#servicio-técnico)
+14. [Reportes](#reportes)
+15. [Nuevas Rutas v1.2 (Destacadas)](#-nuevas-rutas-v12---destacadas) 
 
 ---
 
@@ -1044,7 +1045,239 @@ Buscar ventas por cliente.
 
 ---
 
-## 🛡️ Garantías
+## � Invoices/Recibos
+
+⭐ **NUEVO en v1.3.0** - Sistema completo de generación de recibos/facturas con PDF.
+
+Genera recibos profesionales en PDF desde ventas, permite agregar items adicionales (envío, comisiones, etc), y personaliza con datos de la empresa.
+
+### POST `/invoices`
+Crear nuevo recibo desde una venta.
+
+**Body:**
+```json
+{
+  "sale_id": "uuid-de-la-venta",
+  "additional_items": [
+    {
+      "item_type": "shipping|commission|discount|other",
+      "item_name": "Envío a domicilio",
+      "item_description": "Descripción opcional",
+      "quantity": 1,
+      "unit_price": 50.00,
+      "is_taxable": false
+    },
+    {
+      "item_type": "commission",
+      "item_name": "Comisión COD Entrega",
+      "quantity": 1,
+      "unit_price": 25.00,
+      "is_taxable": false
+    }
+  ],
+  "payment_method": "cash|transfer|card|cod",
+  "payment_status": "pending|paid|partial",
+  "terms_conditions": "Gracias por su compra...",
+  "notes": "Notas adicionales",
+  "company_data": {
+    "name": "Mi Empresa",
+    "address": "Calle Principal 123",
+    "phone": "+502 1234 5678",
+    "email": "contacto@miempresa.com",
+    "rtc": "RTC123456",
+    "logo_url": "https://..."
+  }
+}
+```
+
+**Respuesta (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "invoice_number": "INV-2025-00001",
+    "invoice_date": "2025-10-21",
+    "customer_name": "Cliente Premium",
+    "total_amount": 2500.00,
+    "is_draft": true,
+    "payment_status": "pending"
+  }
+}
+```
+
+### GET `/invoices`
+Listar recibos con filtros.
+
+**Query params:**
+- `page`: number (default: 1)
+- `limit`: number (default: 20)
+- `start_date`: YYYY-MM-DD
+- `end_date`: YYYY-MM-DD
+- `invoice_number`: string (search)
+- `payment_status`: pending|paid|partial
+- `is_draft`: true|false
+- `sort_by`: invoice_date|total_amount|created_at
+- `sort_order`: ASC|DESC
+
+### GET `/invoices/:id`
+Obtener recibo con detalles y líneas.
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "invoice_number": "INV-2025-00001",
+    "invoice_date": "2025-10-21",
+    "customer_name": "Cliente Premium",
+    "customer_email": "cliente@example.com",
+    "customer_address": "Calle 123",
+    "company_name": "Mi Empresa",
+    "company_address": "Calle Principal 123",
+    "subtotal": 2500.00,
+    "tax_amount": 300.00,
+    "additional_items_total": 75.00,
+    "discount_amount": 0,
+    "total_amount": 2875.00,
+    "payment_method": "transfer",
+    "is_draft": true,
+    "pdf_url": "https://...",
+    "line_items": [
+      {
+        "id": "uuid",
+        "item_type": "product",
+        "item_name": "Televisor LED 42\"",
+        "quantity": 1,
+        "unit_price": 2500.00,
+        "line_total": 2500.00,
+        "is_taxable": true
+      },
+      {
+        "id": "uuid",
+        "item_type": "shipping",
+        "item_name": "Envío a domicilio",
+        "quantity": 1,
+        "unit_price": 50.00,
+        "line_total": 50.00,
+        "is_taxable": false
+      },
+      {
+        "id": "uuid",
+        "item_type": "commission",
+        "item_name": "Comisión COD Entrega",
+        "quantity": 1,
+        "unit_price": 25.00,
+        "line_total": 25.00,
+        "is_taxable": false
+      }
+    ]
+  }
+}
+```
+
+### POST `/invoices/:id/line-items`
+Agregar item adicional a recibo (solo si está en borrador).
+
+**Body:**
+```json
+{
+  "item_type": "shipping|commission|discount|other",
+  "item_name": "Embalaje especial",
+  "item_description": "Embalaje con protección",
+  "quantity": 1,
+  "unit_price": 15.00,
+  "is_taxable": false
+}
+```
+
+### DELETE `/invoices/:id/line-items/:itemId`
+Eliminar item del recibo (solo si está en borrador).
+
+### POST `/invoices/:id/generate-pdf`
+Generar PDF del recibo y almacenar en Cloudinary.
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "invoice_id": "uuid",
+    "invoice_number": "INV-2025-00001",
+    "pdf_url": "https://res.cloudinary.com/...",
+    "message": "PDF generated and stored successfully"
+  }
+}
+```
+
+### GET `/invoices/:id/download-pdf`
+Descargar PDF del recibo. Redirige a la URL de Cloudinary.
+
+### PATCH `/invoices/:id/finalize`
+Finalizar recibo (marcar como no borrador). Una vez finalizado, no puede ser editado.
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "invoice_number": "INV-2025-00001",
+    "is_draft": false,
+    "finalized_at": "2025-10-21T15:30:00Z"
+  }
+}
+```
+
+### PUT `/invoices/:id`
+Actualizar recibo (solo si está en borrador).
+
+**Body (todos opcionales):**
+```json
+{
+  "payment_method": "cash|transfer|card|cod",
+  "payment_status": "pending|paid|partial",
+  "terms_conditions": "Nuevo texto",
+  "notes": "Nuevas notas"
+}
+```
+
+### GET `/invoices/statistics`
+Estadísticas de recibos.
+
+**Query params:**
+- `start_date`: YYYY-MM-DD (opcional)
+- `end_date`: YYYY-MM-DD (opcional)
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "data": {
+    "total_invoices": 45,
+    "draft_count": 3,
+    "paid_count": 35,
+    "pending_count": 7,
+    "total_revenue": 125000.00,
+    "avg_invoice_amount": 2777.78
+  }
+}
+```
+
+### 📋 Características de Invoices v1.3:
+- ✅ Numeración automática por año (INV-2025-00001)
+- ✅ Items flexibles: productos, envío, comisiones, descuentos
+- ✅ Generación de PDF profesional con datos de empresa
+- ✅ Almacenamiento de PDFs en Cloudinary
+- ✅ Borrador → Finalizado (una vez finalizado no se puede editar)
+- ✅ Gestión completa: crear, editar, finalizar, cancelar
+- ✅ Estadísticas de ingresos por recibos
+- ✅ Descarga directa de PDFs
+
+---
+
+## �🛡️ Garantías
 
 ### GET `/warranties`
 Listar garantías con filtros.

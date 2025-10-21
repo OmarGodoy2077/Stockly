@@ -1,7 +1,7 @@
 # 📚 Stockly Backend - Documentación Oficial
 
-**Versión:** 1.1.0  
-**Última Actualización:** 20 de Octubre, 2025  
+**Versión:** 1.3.0 ⭐ **NUEVO: Sistema de Invoices**  
+**Última Actualización:** 21 de Octubre, 2025  
 **Estado:** ✅ Listo para Producción
 
 ---
@@ -16,6 +16,8 @@ Stockly es un **sistema SaaS multi-tenant** para la gestión integral de inventa
 - ✅ **Garantías y Servicio Técnico**: Seguimiento completo
 - ✅ **Sistema de Compras**: Registro y actualización automática de stock
 - ✅ **Invitaciones**: Sistema de códigos para agregar usuarios
+- 🆕 **Invoices/Recibos**: Generación de PDFs profesionales con numeración automática
+- 🆕 **Items Flexibles**: Soporte para envío, comisiones, descuentos sin BD previa
 
 ---
 
@@ -137,7 +139,8 @@ Los dueños de empresas pueden generar códigos únicos para invitar usuarios:
 | Validación | Zod | 3+ |
 | Logging | Winston | 3+ |
 | OCR | Tesseract.js | 5+ |
-| Almacenamiento | Firebase Storage | 12+ |
+| Almacenamiento | Cloudinary | - |
+| **Generación PDF** | **jsPDF + autoTable** | **3.0.3 + 5.0.2** |
 
 ---
 
@@ -161,6 +164,8 @@ Los dueños de empresas pueden generar códigos únicos para invitar usuarios:
 - ✅ **Garantías** - Seguimiento automático
 - ✅ **Servicio Técnico** - Estados y prioridades
 - ✅ **Reportes** - Estadísticas y análisis
+- 🆕 **Invoices** - Recibos profesionales en PDF
+- 🆕 **Items Flexibles** - Envío, comisiones, descuentos
 
 ---
 
@@ -212,7 +217,27 @@ PUT    /api/v1/categories/:id        # Actualizar
 DELETE /api/v1/categories/:id        # Eliminar
 ```
 
-**Ver documentación completa en [API_REFERENCE.md](API_REFERENCE.md)**
+**Ver documentación completa en [API_REFERENCE.md](docs/API_REFERENCE.md)**
+
+---
+
+## 🆕 Nuevos Endpoints v1.3.0 - Invoices
+
+### Invoices (Recibos/Facturas)
+```http
+POST   /api/v1/invoices                           # Crear invoice
+GET    /api/v1/invoices                           # Listar invoices
+GET    /api/v1/invoices/:id                       # Obtener detalle
+POST   /api/v1/invoices/:id/line-items            # Agregar item
+DELETE /api/v1/invoices/:id/line-items/:itemId    # Eliminar item
+POST   /api/v1/invoices/:id/generate-pdf          # Generar PDF
+GET    /api/v1/invoices/:id/download-pdf          # Descargar PDF
+PATCH  /api/v1/invoices/:id/finalize              # Finalizar
+PUT    /api/v1/invoices/:id                       # Actualizar
+GET    /api/v1/invoices/statistics                # Estadísticas
+```
+
+**[Ver documentación completa de Invoices →](docs/API_REFERENCE.md#invoicesrecibos)**
 
 ---
 
@@ -283,6 +308,13 @@ curl -X POST http://localhost:3000/api/v1/products/PRODUCT_ID/attributes/bulk \
 - Atributos totalmente personalizables
 - Todos los estados disponibles
 
+### Invoicing para Emprendedores
+- Crear recibos desde ventas
+- Agregar items flexibles (envío, comisiones)
+- Generar PDFs profesionales
+- Numeración secuencial automática
+- Estadísticas de ingresos
+
 ---
 
 ## 🛠️ Desarrollo
@@ -320,19 +352,40 @@ npm run lint         # Verificar código
 
 ## 🔄 Roadmap
 
-### v1.2.0 (Próxima)
-- [ ] Sistema de notificaciones en tiempo real
-- [ ] Reportes avanzados con gráficos
-- [ ] Exportación a PDF/Excel
-- [ ] Dashboard personalizable
-- [ ] Múltiples monedas
+### v1.3.0 ✅ COMPLETADO
+- ✅ Sistema de Invoices/Recibos
+- ✅ Generación de PDFs profesionales (jsPDF)
+- ✅ Almacenamiento en Cloudinary
+- ✅ Items flexibles (envío, comisiones, descuentos)
+- ✅ Numeración automática y secuencial
+- ✅ Estadísticas de ingresos
+
+### v1.4.0 (Próxima)
+- [ ] Email de invoices a cliente
+- [ ] Códigos QR en PDFs
+- [ ] Recordatorios de pago
+- [ ] Integración con pasarelas de pago
+- [ ] Múltiples idiomas en PDFs
 
 ### v2.0.0 (Futuro)
-- [ ] Integración con WhatsApp Business
 - [ ] App móvil (React Native)
 - [ ] Sistema de facturación electrónica
 - [ ] Integración con marketplaces
 - [ ] BI y análisis predictivo
+- [ ] Integración con WhatsApp Business
+
+---
+
+## 📖 Documentación Completa
+
+| Documento | Descripción |
+|---|---|
+| [API_REFERENCE.md](docs/API_REFERENCE.md) | Referencia completa de endpoints (v1.3.0) |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Diagrama técnico y diseño BD |
+| [SETUP.md](docs/SETUP.md) | Guía de configuración inicial |
+| [DEPLOYMENT_GUIDE_v1.3.0.md](docs/DEPLOYMENT_GUIDE_v1.3.0.md) | Pasos para desplegar |
+| [IMPLEMENTATION_SUMMARY_v1.3.0.md](docs/IMPLEMENTATION_SUMMARY_v1.3.0.md) | Cambios en v1.3.0 |
+| [EXECUTIVE_SUMMARY_v1.3.0.md](EXECUTIVE_SUMMARY_v1.3.0.md) | Resumen ejecutivo |
 
 ---
 

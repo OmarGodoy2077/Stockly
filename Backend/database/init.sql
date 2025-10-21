@@ -226,6 +226,88 @@ CREATE TABLE IF NOT EXISTS warranties (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Invoices table - Recibos/Facturas generados desde ventas (v1.3.0)
+CREATE TABLE IF NOT EXISTS invoices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    sale_id UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+    invoice_number VARCHAR(50) NOT NULL, -- Format: INV-2025-00001
+    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    invoice_year INTEGER NOT NULL DEFAULT EXTRACT(YEAR FROM CURRENT_DATE),
+    invoice_sequence INTEGER NOT NULL, -- Secuencia numerada por año
+    
+    -- Datos del cliente
+    customer_name VARCHAR(255) NOT NULL,
+    customer_email VARCHAR(255),
+    customer_phone VARCHAR(50),
+    customer_address TEXT,
+    customer_id_type VARCHAR(50),
+    customer_id_number VARCHAR(50),
+    
+    -- Datos de la empresa
+    company_name VARCHAR(255) NOT NULL,
+    company_address TEXT,
+    company_phone VARCHAR(50),
+    company_email VARCHAR(255),
+    company_rtc VARCHAR(100),
+    company_logo_url TEXT,
+    
+    -- Totales
+    subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+    tax_amount DECIMAL(10,2) DEFAULT 0,
+    tax_percentage DECIMAL(5,2) DEFAULT 12,
+    additional_items_total DECIMAL(10,2) DEFAULT 0,
+    discount_amount DECIMAL(10,2) DEFAULT 0,
+    total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    
+    -- Pago
+    payment_method VARCHAR(100),
+    payment_status VARCHAR(50) DEFAULT 'pending',
+    
+    -- Términos
+    terms_conditions TEXT,
+    notes TEXT,
+    
+    -- PDF
+    pdf_url TEXT,
+    pdf_generated_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Control
+    is_draft BOOLEAN DEFAULT true,
+    is_cancelled BOOLEAN DEFAULT false,
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(company_id, invoice_number),
+    UNIQUE(company_id, invoice_year, invoice_sequence),
+    CONSTRAINT invoice_total_check CHECK (total_amount >= 0)
+);
+
+-- Invoice line items - Items adicionales y flexibles en el recibo
+CREATE TABLE IF NOT EXISTS invoice_line_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    
+    item_type VARCHAR(50) NOT NULL, -- product, shipping, commission, discount, other
+    item_name VARCHAR(255) NOT NULL,
+    item_description TEXT,
+    product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+    
+    quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
+    unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+    line_total DECIMAL(10,2) NOT NULL DEFAULT 0,
+    
+    is_taxable BOOLEAN DEFAULT false,
+    line_order INTEGER NOT NULL,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT line_item_total_check CHECK (line_total >= 0)
+);
+
 -- Service histories table - Technical service records
 CREATE TABLE IF NOT EXISTS service_histories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -330,6 +412,21 @@ CREATE INDEX IF NOT EXISTS idx_warranties_serial ON warranties(serial_number);
 CREATE INDEX IF NOT EXISTS idx_warranties_expires ON warranties(expires_at);
 CREATE INDEX IF NOT EXISTS idx_warranties_active ON warranties(is_active);
 
+-- Invoices indexes (v1.3.0)
+CREATE INDEX IF NOT EXISTS idx_invoices_company_id ON invoices(company_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_sale_id ON invoices(sale_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_invoice_number ON invoices(company_id, invoice_number);
+CREATE INDEX IF NOT EXISTS idx_invoices_invoice_date ON invoices(company_id, invoice_date);
+CREATE INDEX IF NOT EXISTS idx_invoices_created_by ON invoices(created_by);
+CREATE INDEX IF NOT EXISTS idx_invoices_is_draft ON invoices(is_draft);
+CREATE INDEX IF NOT EXISTS idx_invoices_year_sequence ON invoices(company_id, invoice_year, invoice_sequence);
+
+-- Invoice line items indexes
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice_id ON invoice_line_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_company_id ON invoice_line_items(company_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_product_id ON invoice_line_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_type ON invoice_line_items(item_type);
+
 -- Service histories indexes
 CREATE INDEX IF NOT EXISTS idx_service_histories_company_id ON service_histories(company_id);
 CREATE INDEX IF NOT EXISTS idx_service_histories_serial ON service_histories(serial_number);
@@ -364,6 +461,10 @@ CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH
 CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_service_histories_updated_at BEFORE UPDATE ON service_histories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_purchases_updated_at BEFORE UPDATE ON purchases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Triggers for invoices (v1.3.0)
+CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_invoice_line_items_updated_at BEFORE UPDATE ON invoice_line_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to calculate purchase profit and margin
 CREATE OR REPLACE FUNCTION calculate_purchase_profit()
@@ -418,6 +519,20 @@ CREATE TRIGGER trigger_attribute_templates_updated_at
 BEFORE UPDATE ON attribute_templates
 FOR EACH ROW
 EXECUTE FUNCTION update_attribute_templates_updated_at();
+
+-- Trigger for calculating invoice line item totals (v1.3.0)
+CREATE OR REPLACE FUNCTION calculate_invoice_line_total()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.line_total = NEW.quantity * NEW.unit_price;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_calculate_invoice_line_total
+BEFORE INSERT OR UPDATE ON invoice_line_items
+FOR EACH ROW
+EXECUTE FUNCTION calculate_invoice_line_total();
 
 -- Function to generate unique invitation code
 CREATE OR REPLACE FUNCTION generate_invitation_code()
@@ -514,6 +629,33 @@ CREATE OR REPLACE FUNCTION calculate_warranty_expiry(months INTEGER, start_date 
 RETURNS DATE AS $$
 BEGIN
     RETURN start_date + INTERVAL '1 month' * months;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to generate next invoice number (v1.3.0)
+CREATE OR REPLACE FUNCTION generate_invoice_number(p_company_id UUID)
+RETURNS TABLE(
+    invoice_number VARCHAR,
+    sequence_number INTEGER,
+    invoice_year INTEGER
+) AS $$
+DECLARE
+    v_year INTEGER;
+    v_sequence INTEGER;
+    v_invoice_number VARCHAR;
+BEGIN
+    v_year := EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER;
+    
+    v_sequence := COALESCE(
+        (SELECT MAX(invoice_sequence) 
+         FROM invoices 
+         WHERE company_id = p_company_id AND invoice_year = v_year),
+        0
+    ) + 1;
+    
+    v_invoice_number := 'INV-' || v_year || '-' || LPAD(v_sequence::TEXT, 5, '0');
+    
+    RETURN QUERY SELECT v_invoice_number::VARCHAR, v_sequence, v_year;
 END;
 $$ LANGUAGE plpgsql;
 

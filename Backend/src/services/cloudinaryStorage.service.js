@@ -498,6 +498,67 @@ class CloudinaryStorageService {
     }
 
     /**
+     * Upload PDF invoice to Cloudinary
+     * @param {Buffer} pdfBuffer - PDF file buffer
+     * @param {string} fileName - PDF file name
+     * @param {Object} metadata - Additional metadata
+     * @returns {Promise<Object>} Upload result
+     */
+    static async uploadInvoicePdf(pdfBuffer, fileName, metadata = {}) {
+        try {
+            // Generate unique filename
+            const timestamp = Date.now();
+            const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const uniqueId = `${timestamp}_${sanitizedFileName.split('.')[0]}`;
+
+            // Upload to Cloudinary
+            const uploadResult = await cloudinaryConfig.uploadBuffer(
+                pdfBuffer,
+                'stockly/invoices',
+                {
+                    public_id: uniqueId,
+                    overwrite: false,
+                    invalidate: true,
+                    resource_type: 'raw',
+                    tags: ['invoice', 'pdf', metadata.companyId || 'unknown'].filter(Boolean),
+                    context: {
+                        originalName: fileName,
+                        invoiceNumber: metadata.invoiceNumber || 'unknown',
+                        invoiceId: metadata.invoiceId || 'unknown',
+                        uploadedBy: metadata.uploadedBy || 'system',
+                        ...metadata
+                    }
+                }
+            );
+
+            logger.cloudinary('invoice_pdf_upload', true, 0, {
+                publicId: uploadResult.publicId,
+                originalName: fileName,
+                size: pdfBuffer.length,
+                invoiceNumber: metadata.invoiceNumber
+            });
+
+            return {
+                success: true,
+                publicUrl: uploadResult.publicUrl,
+                publicId: uploadResult.publicId,
+                fileName: uniqueId,
+                originalName: fileName,
+                format: uploadResult.format,
+                size: pdfBuffer.length,
+                uploadedAt: uploadResult.uploadedAt
+            };
+
+        } catch (error) {
+            logger.cloudinary('invoice_pdf_upload', false, 0, {
+                fileName,
+                error: error.message
+            });
+            throw error;
+        }
+    }
+
+    /**
      * Generate responsive image srcset for different screen sizes
      * @param {string} publicId - Public ID of the image
      * @returns {Object} Responsive image URLs
