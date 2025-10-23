@@ -306,13 +306,18 @@ class StocklyServer {
             }
 
             // Test OCR functionality (wrapped in try-catch to prevent uncaught exceptions)
-            try {
-                const ocrHealth = await tesseractConfig.healthCheck();
-                if (ocrHealth.status !== 'healthy') {
-                    logger.warn('OCR health check failed:', ocrHealth);
+            // Skip on startup to save memory - will initialize on first use
+            if (process.env.NODE_ENV === 'development') {
+                try {
+                    const ocrHealth = await tesseractConfig.healthCheck();
+                    if (ocrHealth.status !== 'healthy') {
+                        logger.warn('OCR health check failed:', ocrHealth);
+                    }
+                } catch (error) {
+                    logger.warn('OCR health check threw an error:', error);
                 }
-            } catch (error) {
-                logger.warn('OCR health check threw an error:', error);
+            } else {
+                logger.info('Skipping OCR initialization on startup (will initialize on first use)');
             }
 
             // Start HTTP server

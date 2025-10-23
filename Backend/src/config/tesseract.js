@@ -20,6 +20,7 @@ class TesseractConfig {
 
     /**
      * Initialize Tesseract worker
+     * Only initializes on first use to save memory
      */
     async initializeWorker() {
         try {
@@ -34,10 +35,10 @@ class TesseractConfig {
 
             // Set OCR parameters for serial number detection
             // Using PSM 7 (Single line) for better serial number detection
+            // Note: Only set these during initialization, before recognize()
             await this.worker.setParameters({
                 tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-.:/#',
                 tessedit_pageseg_mode: '7', // Treat image as single text line (best for serial numbers)
-                tessedit_ocr_engine_mode: '1', // Neural nets LSTM engine only
                 preserve_interword_spaces: '0', // Don't preserve spaces for serial numbers
                 tessedit_do_invert: '0',
                 classify_enable_learning: '0',
@@ -54,8 +55,9 @@ class TesseractConfig {
             });
 
         } catch (error) {
-            logger.error('Failed to initialize Tesseract worker:', error);
-            throw new Error(`Tesseract initialization failed: ${error.message}`);
+            this.initialized = false;
+            logger.warn('Tesseract initialization warning (OCR will be retried on next use):', error.message);
+            // Don't throw - allow app to start without Tesseract
         }
     }
 

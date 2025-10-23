@@ -5,6 +5,17 @@
   },
   "deploy": {
     "startCommand": "npm start",
-    "restartPolicyMaxRetries": 5
+    "restartPolicyMaxRetries": 5,
+    "healthchecks": {
+      "http": {
+        "path": "/api/health",
+        "interval": 10,
+        "timeout": 5
+      }
+    }
+  },
+  "env": {
+    "NODE_ENV": "production",
+    "NODE_OPTIONS": "--max-old-space-size=512"
   }
 }
