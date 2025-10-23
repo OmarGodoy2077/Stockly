@@ -72,31 +72,40 @@ class StocklyServer {
             crossOriginEmbedderPolicy: false
         }));
 
-        // CORS configuration
+        // CORS configuration - Secure for production
         const corsOptions = {
             origin: (origin, callback) => {
                 // Allow requests with no origin (mobile apps, Postman, etc.)
                 if (!origin) return callback(null, true);
 
                 const allowedOrigins = [
-                    process.env.CORS_ORIGIN || 'http://localhost:3000',
+                    // Development
                     'http://localhost:3000',
                     'http://localhost:5173',
                     'http://localhost:3001',
+                    'http://127.0.0.1:5173',
+                    // Environment variable (for custom domains)
+                    process.env.CORS_ORIGIN,
+                    // Railway production
+                    'https://stockly-frontend-prod.railway.app',
+                    'https://stockly-backend.railway.app',
+                    // Vercel (if deployed there)
                     'https://stockly-frontend.vercel.app',
+                    // Firebase (if deployed there)
                     'https://stockly-production.web.app'
-                ];
+                ].filter(Boolean); // Remove undefined values
 
                 if (allowedOrigins.includes(origin)) {
                     callback(null, true);
                 } else {
-                    logger.warn('CORS blocked request from origin:', { origin });
+                    logger.warn('CORS blocked request from origin:', { origin, allowedOrigins });
                     callback(new Error('Not allowed by CORS'));
                 }
             },
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+            maxAge: 86400 // 24 hours
         };
 
         this.app.use(cors(corsOptions));
