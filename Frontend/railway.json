@@ -1,6 +1,9 @@
 {
   "build": {
-    "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile",
+    "args": {
+      "VITE_API_URL": "$VITE_API_URL"
+    }
   },
   "deploy": {
     "startCommand": "nginx -g 'daemon off;'"

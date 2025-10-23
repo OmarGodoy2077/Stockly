@@ -66,7 +66,7 @@ class StocklyServer {
                     objectSrc: ["'none'"],
                     mediaSrc: ["'self'"],
                     frameSrc: ["'self'"], // Cambiar de 'none' a 'self' para permitir iframes del mismo origen
-                    frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:5173", "https://stockly-frontend.vercel.app", "https://stockly-production.web.app","https://stockly-production-b5a4.up.railway.app"],
+                    frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:5173", "https://stockly-frontend.vercel.app", "https://stockly-production.web.app","https://stockly-production-b5a4.up.railway.app","https://accomplished-miracle-production.up.railway.app"],
                 },
             },
             crossOriginEmbedderPolicy: false
