@@ -22,13 +22,14 @@ export interface CompanyInfo {
  */
 export const generateSaleReceiptHTML = (sale: Sale, company: CompanyInfo): string => {
   const saleDate = new Date(sale.created_at).toLocaleDateString('es-ES');
-  const subtotal = sale.subtotal || sale.items.reduce(
+  const items = sale.items || [];
+  const subtotal = sale.subtotal || items.reduce(
     (sum, item) => sum + (item.line_total || item.quantity * item.unit_price),
     0
   );
   const total = sale.total || subtotal;
 
-  const itemsHTML = sale.items
+  const itemsHTML = items
     .map(
       (item) => `
     <tr>
