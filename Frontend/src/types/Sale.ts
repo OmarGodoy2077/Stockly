@@ -9,17 +9,22 @@ export interface Sale {
   customer_phone?: string;
   customer_address?: string;
   subtotal: number;
-  tax: number;
-  total: number;
+  discount_amount: number;
+  total_amount: number;
   warranty_months?: number;
   warranty_expiry?: string;
   notes?: string;
+  serial_number?: string;
+  serial_image_url?: string;
+  sales_platform?: string;
   created_at: string;
-  updated_at: string;
-  items: SaleItem[];
+  updated_at?: string;
+  items?: SaleItem[];
   image_url?: string;
   payment_method?: 'cash' | 'card' | 'check' | 'transfer';
   payment_status?: 'pending' | 'completed' | 'cancelled';
+  // Compatibilidad con nombres antiguos
+  total?: number;
 }
 
 export interface SaleItem {

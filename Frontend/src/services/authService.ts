@@ -213,7 +213,8 @@ export const refreshToken = async (): Promise<AuthResponse> => {
 
 export const logout = async (): Promise<void> => {
   try {
-    await apiClient.post('/auth/logout');
+    const refreshToken = getStoredRefreshToken();
+    await apiClient.post('/auth/logout', { refreshToken });
   } finally {
     clearTokens();
   }

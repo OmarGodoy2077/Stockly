@@ -59,7 +59,8 @@ export interface SaleResponse {
 export interface OCRResult {
   serial_number: string;
   confidence: number;
-  raw_text: string;
+  ocr_text?: string;
+  candidates?: Array<{ value: string; confidence: number }>;
 }
 
 export class SaleService {
@@ -70,10 +71,19 @@ export class SaleService {
         Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== '')
       );
 
-      const response = await apiClient.get<SaleResponse>('/sales', {
+      const response = await apiClient.get<{ data: Sale[]; pagination: any }>('/sales', {
         params: cleanFilters,
       });
-      return response.data;
+      
+      // Extract data and pagination from response wrapper
+      const responseData = response.data;
+      return {
+        data: responseData.data || [],
+        total: responseData.pagination?.total || 0,
+        page: responseData.pagination?.page || 1,
+        limit: responseData.pagination?.limit || 20,
+        totalPages: responseData.pagination?.totalPages || 1,
+      };
     } catch (error) {
       this.handleError(error as AxiosError<ApiError>);
       throw error;
@@ -82,8 +92,8 @@ export class SaleService {
 
   static async getSaleById(id: string): Promise<Sale> {
     try {
-      const response = await apiClient.get<Sale>(`/sales/${id}`);
-      return response.data;
+      const response = await apiClient.get<{ data: Sale }>(`/sales/${id}`);
+      return response.data.data || response.data;
     } catch (error) {
       this.handleError(error as AxiosError<ApiError>);
       throw error;
@@ -92,23 +102,22 @@ export class SaleService {
 
   static async createSale(data: CreateSaleData): Promise<Sale> {
     try {
-      const formData = new FormData();
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === 'items') {
-          formData.append('items', JSON.stringify(value));
-        } else if (key === 'image_file' && value instanceof File) {
-          formData.append('image', value);
-        } else if (value !== undefined && value !== null) {
-          formData.append(key, value.toString());
-        }
-      });
+      // Send as JSON, not FormData
+      const payload = {
+        customer_name: data.customer_name,
+        customer_email: data.customer_email,
+        customer_phone: data.customer_phone,
+        customer_address: data.customer_address,
+        items: data.items,
+        warranty_months: data.warranty_months,
+        notes: data.notes,
+        payment_method: data.payment_method,
+        sales_platform: data.sales_platform,
+      };
 
-      const response = await apiClient.post<Sale>('/sales', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      return response.data;
+      const response = await apiClient.post<{ data: Sale }>('/sales', payload);
+      // Extract the data from the response wrapper
+      return response.data.data || response.data;
     } catch (error) {
       this.handleError(error as AxiosError<ApiError>);
       throw error;
@@ -162,12 +171,14 @@ export class SaleService {
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      const response = await apiClient.post<OCRResult>('/sales/ocr', formData, {
+      const response = await apiClient.post<{ success: boolean; data: OCRResult }>('/sales/ocr', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-      return response.data;
+      
+      // Backend returns { success: true, data: { serial_number, confidence, ... } }
+      return response.data.data;
     } catch (error) {
       this.handleError(error as AxiosError<ApiError>);
       throw error;
@@ -200,6 +211,28 @@ export class SaleService {
         responseType: 'blob',
       });
       return response.data;
+    } catch (error) {
+      this.handleError(error as AxiosError<ApiError>);
+      throw error;
+    }
+  }
+
+  static async getReceiptPreviewUrl(id: string): Promise<string> {
+    try {
+      const response = await apiClient.post<{ data: { pdf_url: string } }>(`/sales/${id}/receipt`, {});
+      const pdfUrl = response.data.data?.pdf_url;
+      
+      if (!pdfUrl) {
+        throw new Error('No se pudo obtener la URL del recibo');
+      }
+      
+      // Si la URL es relativa, construir la URL completa
+      if (pdfUrl.startsWith('/')) {
+        const baseUrl = apiClient.defaults.baseURL || '';
+        return baseUrl + pdfUrl;
+      }
+      
+      return pdfUrl;
     } catch (error) {
       this.handleError(error as AxiosError<ApiError>);
       throw error;

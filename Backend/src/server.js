@@ -65,7 +65,8 @@ class StocklyServer {
                     fontSrc: ["'self'"],
                     objectSrc: ["'none'"],
                     mediaSrc: ["'self'"],
-                    frameSrc: ["'none'"],
+                    frameSrc: ["'self'"], // Cambiar de 'none' a 'self' para permitir iframes del mismo origen
+                    frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:5173", "https://stockly-frontend.vercel.app", "https://stockly-production.web.app"],
                 },
             },
             crossOriginEmbedderPolicy: false

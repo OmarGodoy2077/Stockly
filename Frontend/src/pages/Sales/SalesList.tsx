@@ -12,6 +12,13 @@ const SalesList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; saleId: string | null; previewUrl: string | null; loading: boolean }>({
+    isOpen: false,
+    saleId: null,
+    previewUrl: null,
+    loading: false,
+  });
 
   const itemsPerPage = 10;
 
@@ -70,17 +77,62 @@ const SalesList = () => {
     }
   };
 
+  const handlePreviewReceipt = async (id: string) => {
+    try {
+      setPreviewModal({
+        isOpen: true,
+        saleId: id,
+        previewUrl: null,
+        loading: true,
+      });
+      
+      const pdfBlob = await SaleService.downloadReceipt(id);
+      const previewUrl = URL.createObjectURL(pdfBlob);
+      
+      setPreviewModal({
+        isOpen: true,
+        saleId: id,
+        previewUrl,
+        loading: false,
+      });
+    } catch (err: any) {
+      toast.error('Error al cargar vista previa del recibo');
+      setPreviewModal({
+        isOpen: false,
+        saleId: null,
+        previewUrl: null,
+        loading: false,
+      });
+    }
+  };
+
+  const closePreviewModal = () => {
+    if (previewModal.previewUrl && previewModal.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewModal.previewUrl);
+    }
+    setPreviewModal({
+      isOpen: false,
+      saleId: null,
+      previewUrl: null,
+      loading: false,
+    });
+  };
+
   const handleDeleteSale = async (id: string) => {
     if (!window.confirm('¿Estás seguro de que deseas eliminar esta venta?')) {
       return;
     }
 
     try {
+      setDeletingId(id);
       await SaleService.deleteSale(id);
       toast.success('Venta eliminada correctamente');
+      // Refresh the list
       fetchSales(currentPage);
     } catch (err: any) {
       toast.error(err?.message || 'Error al eliminar venta');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -186,7 +238,7 @@ const SalesList = () => {
                       {sale.customer_email || sale.customer_phone || '-'}
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      ${sale.total?.toFixed(2) || '0.00'}
+                      ${(sale.total_amount || sale.total || 0)?.toFixed(2) || '0.00'}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span
@@ -208,18 +260,26 @@ const SalesList = () => {
                         Ver
                       </button>
                       <button
+                        onClick={() => handlePreviewReceipt(sale.id)}
+                        className="text-purple-600 hover:text-purple-900 font-medium"
+                        title="Vista previa del recibo"
+                      >
+                        Previsualizar
+                      </button>
+                      <button
                         onClick={() => handleDownloadReceipt(sale.id, sale.customer_name)}
                         className="text-green-600 hover:text-green-900 font-medium"
                         title="Descargar recibo"
                       >
-                        Recibo
+                        Descargar
                       </button>
                       <button
                         onClick={() => handleDeleteSale(sale.id)}
-                        className="text-red-600 hover:text-red-900 font-medium"
+                        disabled={deletingId === sale.id}
+                        className="text-red-600 hover:text-red-900 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Eliminar venta"
                       >
-                        Eliminar
+                        {deletingId === sale.id ? 'Eliminando...' : 'Eliminar'}
                       </button>
                     </td>
                   </tr>
@@ -261,6 +321,71 @@ const SalesList = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Preview Modal */}
+      {previewModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Vista Previa del Recibo</h2>
+              <button
+                onClick={closePreviewModal}
+                disabled={previewModal.loading}
+                className="text-gray-500 hover:text-gray-700 text-2xl disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center">
+              {previewModal.loading ? (
+                <div className="flex flex-col items-center justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mb-4"></div>
+                  <p className="text-gray-600">Cargando vista previa...</p>
+                </div>
+              ) : previewModal.previewUrl ? (
+                <embed
+                  src={previewModal.previewUrl}
+                  type="application/pdf"
+                  className="w-full h-full min-h-[500px]"
+                  title="Previsualización del recibo"
+                />
+              ) : (
+                <div className="text-center">
+                  <p className="text-red-600">Error al cargar la vista previa</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={closePreviewModal}
+                disabled={previewModal.loading}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  if (previewModal.saleId) {
+                    const sale = sales.find(s => s.id === previewModal.saleId);
+                    if (sale) {
+                      handleDownloadReceipt(previewModal.saleId, sale.customer_name);
+                    }
+                  }
+                }}
+                disabled={previewModal.loading}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Descargar desde aquí
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

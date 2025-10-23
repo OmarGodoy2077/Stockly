@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { ProductService } from '../../services/productService';
 import { SaleService } from '../../services/saleService';
 import type { Product } from '../../types';
+import { SerialNumberInput } from '../../components/SerialNumberInput';
 
 interface SaleItemForm {
   product_id: string;
@@ -76,8 +77,20 @@ const NewSale = () => {
   const handleProductSelect = (index: number, productId: string) => {
     const product = products.find((p) => p.id === productId);
     if (product) {
-      handleItemChange(index, 'product_id', productId);
-      handleItemChange(index, 'unit_price', product.price);
+      setItems(prevItems => {
+        const newItems = [...prevItems];
+        // Limitar la cantidad máxima al stock disponible
+        const maxQuantity = product.stock || 0;
+        const currentQuantity = Math.min(newItems[index].quantity, maxQuantity);
+        
+        newItems[index] = {
+          ...newItems[index],
+          product_id: productId,
+          unit_price: product.price,
+          quantity: currentQuantity > 0 ? currentQuantity : 1
+        };
+        return newItems;
+      });
     }
   };
 
@@ -110,6 +123,19 @@ const NewSale = () => {
       return;
     }
 
+    // Validar stock disponible
+    for (const item of validItems) {
+      const product = products.find((p) => p.id === item.product_id);
+      if (!product) {
+        toast.error('Producto no encontrado');
+        return;
+      }
+      if (item.quantity > (product.stock || 0)) {
+        toast.error(`Stock insuficiente para ${product.name}. Disponible: ${product.stock || 0}`);
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       const saleData = {
@@ -124,12 +150,15 @@ const NewSale = () => {
       const sale = await SaleService.createSale(saleData);
       toast.success('Venta creada correctamente');
       
-      // Generate receipt
-      try {
-        await SaleService.generateReceipt(sale.id);
-        toast.success('Recibo generado');
-      } catch (err) {
-        console.error('Error generando recibo:', err);
+      // Generate receipt (opcional, no bloquea la venta)
+      if (sale && sale.id) {
+        try {
+          await SaleService.generateReceipt(sale.id);
+          toast.success('Recibo generado');
+        } catch (err) {
+          console.error('Error generando recibo:', err);
+          // No mostrar error al usuario, la venta ya fue creada
+        }
       }
 
       navigate('/sales');
@@ -144,6 +173,13 @@ const NewSale = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Nueva Venta</h1>
+        <button
+          onClick={() => navigate('/sales')}
+          type="button"
+          className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+        >
+          Cancelar
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -252,15 +288,34 @@ const NewSale = () => {
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)
-                        }
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
-                      />
+                      {(() => {
+                        const product = products.find((p) => p.id === item.product_id);
+                        const maxStock = product?.stock || 0;
+                        return (
+                          <div>
+                            <input
+                              type="number"
+                              min="1"
+                              max={maxStock}
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 1;
+                                const limitedValue = Math.min(value, maxStock);
+                                handleItemChange(index, 'quantity', limitedValue);
+                                if (value > maxStock && maxStock > 0) {
+                                  toast.error(`Stock máximo disponible: ${maxStock}`);
+                                }
+                              }}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                            />
+                            {product && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Stock: {maxStock}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2">
                       <input
@@ -287,30 +342,15 @@ const NewSale = () => {
                         placeholder="0.00"
                       />
                     </td>
-                    <td className="px-3 py-2 space-y-1">
-                      <input
-                        type="text"
+                    <td className="px-3 py-2">
+                      <SerialNumberInput
                         value={item.serial_number || ''}
-                        onChange={(e) =>
-                          handleItemChange(index, 'serial_number', e.target.value)
-                        }
-                        placeholder="Serial"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        onChange={(value) => handleItemChange(index, 'serial_number', value)}
+                        onOCRCapture={async (file) => {
+                          await handleOCRCapture(index, file);
+                        }}
+                        disabled={ocrLoading}
                       />
-                      <label className="block">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              handleOCRCapture(index, file);
-                            }
-                          }}
-                          disabled={ocrLoading}
-                          className="w-full text-xs"
-                        />
-                      </label>
                     </td>
                     <td className="px-3 py-2 text-right font-semibold">
                       ${((item.quantity * item.unit_price) - (item.discount || 0)).toFixed(2)}

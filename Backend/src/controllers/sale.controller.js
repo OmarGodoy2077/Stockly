@@ -4,6 +4,9 @@ import OCRService from '../services/ocr.service.js';
 import CloudinaryStorageService from '../services/cloudinaryStorage.service.js';
 import { logger } from '../config/logger.js';
 import ResponseHandler from '../utils/responseHandler.js';
+import pkg from 'jspdf';
+const { jsPDF } = pkg;
+import autoTable from 'jspdf-autotable';
 
 /**
  * Sale controller - Handles sales-related HTTP requests
@@ -100,7 +103,8 @@ class SaleController {
                 sales_platform = 'direct',
                 notes,
                 warranty_months = 12,
-                serial_image // Base64 image for OCR
+                serial_image, // Base64 image for OCR
+                serial_number // Direct serial number (fallback)
             } = req.body;
 
             // Support both 'items' and 'products' field names for backward compatibility
@@ -113,6 +117,7 @@ class SaleController {
 
             // Calculate totals
             let subtotal = 0;
+            let totalDiscounts = 0;
             const processedProducts = [];
 
             for (const product of productsArray) {
@@ -122,28 +127,31 @@ class SaleController {
 
                 const quantity = parseInt(product.quantity);
                 const unitPrice = parseFloat(product.unit_price);
+                const discount = parseFloat(product.discount || 0);
 
                 if (quantity <= 0 || unitPrice <= 0) {
                     return ResponseHandler.error(res, 'Invalid quantity or price', 400);
                 }
 
-                subtotal += quantity * unitPrice;
+                const lineTotal = quantity * unitPrice;
+                subtotal += lineTotal;
+                totalDiscounts += discount;
 
                 processedProducts.push({
                     product_id: product.product_id,
                     quantity,
                     unit_price: unitPrice,
-                    discount: product.discount || 0
+                    discount: discount
                 });
             }
 
-            // Calculate tax and discount
-            const taxRate = 0.12; // 12% IVA for Guatemala
-            const taxAmount = (subtotal - parseFloat(req.body.discount_amount || 0)) * taxRate;
-            const discountAmount = parseFloat(req.body.discount_amount || 0);
-            const totalAmount = subtotal + taxAmount - discountAmount;
+            // Calculate totals (without taxes)
+            // Formula: Total = Subtotal - Discounts
+            const discountAmount = totalDiscounts;
+            const totalAmount = subtotal - discountAmount;
+            const taxAmount = 0;
 
-            let serialNumber = null;
+            let extractedSerialNumber = serial_number || null;
             let serialImageUrl = null;
 
             // Process serial number image with OCR if provided
@@ -155,39 +163,64 @@ class SaleController {
                     // Validate image
                     const validation = await CloudinaryStorageService.validateImageFile(imageBuffer, 'serial.jpg');
                     if (!validation.valid) {
-                        return ResponseHandler.error(res, validation.error, 400);
-                    }
-
-                    // Upload image to Cloudinary
-                    const uploadResult = await CloudinaryStorageService.uploadSerialImage(
-                        imageBuffer,
-                        `serial_${Date.now()}.jpg`,
-                        { companyId: req.companyId, uploadedBy: req.user.id }
-                    );
-
-                    serialImageUrl = uploadResult.publicUrl;
-
-                    // Extract serial number using OCR
-                    const ocrResult = await OCRService.extractSerialNumber(imageBuffer);
-
-                    if (ocrResult.success && ocrResult.serialNumber) {
-                        serialNumber = ocrResult.serialNumber;
-
-                        logger.business('serial_extracted_from_sale', 'ocr', req.user.id, {
-                            saleCustomer: customer_name,
-                            serialNumber,
-                            confidence: ocrResult.confidence
+                        logger.warn('Serial image validation failed:', {
+                            error: validation.error,
+                            customer: customer_name
                         });
+                        // Don't fail the request, just log the warning
                     } else {
-                        logger.warn('OCR failed to extract serial number:', {
-                            customer: customer_name,
-                            error: ocrResult.error
+                        // Upload image to Cloudinary
+                        const uploadResult = await CloudinaryStorageService.uploadSerialImage(
+                            imageBuffer,
+                            `serial_${Date.now()}.jpg`,
+                            { companyId: req.companyId, uploadedBy: req.user.id }
+                        );
+
+                        serialImageUrl = uploadResult.publicUrl;
+
+                        // Extract serial number using OCR
+                        const ocrResult = await OCRService.extractSerialNumber(imageBuffer);
+
+                        logger.business('ocr_attempt', 'ocr', req.user.id, {
+                            saleCustomer: customer_name,
+                            ocrSuccess: ocrResult.success,
+                            confidence: ocrResult.confidence,
+                            serialNumber: ocrResult.serialNumber,
+                            candidates: ocrResult.candidates?.length || 0
                         });
+
+                        if (ocrResult.success && ocrResult.serialNumber) {
+                            extractedSerialNumber = ocrResult.serialNumber;
+
+                            logger.business('serial_extracted_from_sale', 'ocr', req.user.id, {
+                                saleCustomer: customer_name,
+                                serialNumber: extractedSerialNumber,
+                                confidence: ocrResult.confidence
+                            });
+                        } else {
+                            logger.warn('OCR failed to extract serial number:', {
+                                customer: customer_name,
+                                error: ocrResult.error,
+                                candidates: ocrResult.candidates || []
+                            });
+                            
+                            // If OCR failed and no manual serial_number provided, log candidates for debugging
+                            if (!extractedSerialNumber && ocrResult.candidates && ocrResult.candidates.length > 0) {
+                                logger.warn('OCR candidates available:', {
+                                    customer: customer_name,
+                                    candidates: ocrResult.candidates.map(c => ({
+                                        value: c.value,
+                                        confidence: c.confidence
+                                    }))
+                                });
+                            }
+                        }
                     }
 
                 } catch (error) {
                     logger.error('Error processing serial image:', error);
                     // Continue with sale creation even if OCR fails
+                    // Use manual serial_number if provided
                 }
             }
 
@@ -204,7 +237,7 @@ class SaleController {
                 taxAmount,
                 discountAmount,
                 totalAmount,
-                serialNumber,
+                serialNumber: extractedSerialNumber,
                 serialImageUrl,
                 warrantyMonths: warranty_months,
                 paymentMethod: payment_method,
@@ -235,7 +268,7 @@ class SaleController {
                 companyId: req.companyId,
                 customerName: customer_name,
                 totalAmount,
-                serialNumber,
+                serialNumber: extractedSerialNumber,
                 productCount: processedProducts.length
             });
 
@@ -433,6 +466,284 @@ class SaleController {
 
         } catch (error) {
             ResponseHandler.handleError(res, error, 'SaleController.searchBySerialNumber');
+        }
+    }
+
+    /**
+     * Generate receipt PDF for a sale
+     * GET /api/v1/sales/:id/receipt-pdf
+     */
+    static async generateReceiptPdf(req, res) {
+        try {
+            const { id } = req.params;
+
+            const sale = await SaleModel.findById(id, req.companyId);
+            if (!sale) {
+                return ResponseHandler.notFound(res, 'Sale');
+            }
+
+            // Validate and enrich products
+            if (!sale.products || !Array.isArray(sale.products) || sale.products.length === 0) {
+                return ResponseHandler.error(res, 'Sale has no products. Cannot generate receipt.', 400);
+            }
+
+            // Enrich products with product names
+            const enrichedProducts = [];
+            for (const product of sale.products) {
+                if (!product.product_id || product.quantity === undefined || product.unit_price === undefined) {
+                    logger.warn('Invalid product data in sale:', {
+                        saleId: id,
+                        product
+                    });
+                    return ResponseHandler.error(res, 'Invalid product data in sale', 400);
+                }
+
+                try {
+                    const productDetails = await ProductModel.findById(product.product_id, req.companyId);
+                    enrichedProducts.push({
+                        ...product,
+                        product_name: productDetails?.name || product.product_name || 'Producto sin nombre'
+                    });
+                } catch (error) {
+                    logger.warn('Could not fetch product details:', {
+                        productId: product.product_id,
+                        error: error.message
+                    });
+                    // Continue with available data
+                    enrichedProducts.push({
+                        ...product,
+                        product_name: product.product_name || 'Producto'
+                    });
+                }
+            }
+
+            // Create PDF
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'letter'
+            });
+
+            const margin = 15;
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            let yPosition = margin;
+
+            // Title
+            pdf.setFontSize(16);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('RECIBO DE VENTA', margin, yPosition);
+            yPosition += 15;
+
+            // Sale info
+            pdf.setFontSize(10);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`Número: ${sale.id.substring(0, 8).toUpperCase()}`, margin, yPosition);
+            yPosition += 6;
+            pdf.text(`Fecha: ${new Date(sale.created_at).toLocaleDateString('es-ES')}`, margin, yPosition);
+            yPosition += 10;
+
+            // Customer info
+            pdf.setFont(undefined, 'bold');
+            pdf.text('CLIENTE:', margin, yPosition);
+            yPosition += 6;
+            pdf.setFont(undefined, 'normal');
+            pdf.text(sale.customer_name, margin + 5, yPosition);
+            yPosition += 5;
+            if (sale.customer_email) {
+                pdf.text(`Email: ${sale.customer_email}`, margin + 5, yPosition);
+                yPosition += 5;
+            }
+            if (sale.customer_phone) {
+                pdf.text(`Teléfono: ${sale.customer_phone}`, margin + 5, yPosition);
+                yPosition += 5;
+            }
+            yPosition += 5;
+
+            // Items table
+            const tableData = [];
+            const columns = ['Producto', 'Cantidad', 'Precio Unit.', 'Descuento', 'Total'];
+
+            for (const product of enrichedProducts) {
+                const quantity = product.quantity || 0;
+                const unitPrice = product.unit_price || 0;
+                const discount = product.discount || 0;
+                const lineTotal = (quantity * unitPrice) - discount;
+
+                tableData.push([
+                    `${product.product_name}`,
+                    quantity.toString(),
+                    `$${unitPrice.toFixed(2)}`,
+                    `$${discount.toFixed(2)}`,
+                    `$${lineTotal.toFixed(2)}`
+                ]);
+            }
+
+            autoTable(pdf, {
+                head: [columns],
+                body: tableData,
+                startY: yPosition,
+                margin: { left: margin, right: margin },
+                headStyles: {
+                    fillColor: [41, 128, 185],
+                    textColor: 255,
+                    fontStyle: 'bold'
+                },
+                bodyStyles: {
+                    textColor: 50
+                },
+                alternateRowStyles: {
+                    fillColor: [242, 242, 242]
+                }
+            });
+
+            yPosition = pdf.lastAutoTable.finalY + 10;
+
+            // Totals section
+            const totalsX = pageWidth - margin - 50;
+            pdf.setFont(undefined, 'normal');
+            pdf.setFontSize(10);
+
+            pdf.text('Subtotal:', totalsX, yPosition);
+            pdf.text(`$${(sale.subtotal || 0).toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+            yPosition += 6;
+
+            if (sale.discount_amount && sale.discount_amount > 0) {
+                pdf.text('Descuento:', totalsX, yPosition);
+                pdf.text(`-$${sale.discount_amount.toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+                yPosition += 6;
+            }
+
+            // Total
+            pdf.setFont(undefined, 'bold');
+            pdf.setFontSize(12);
+            pdf.text('TOTAL:', totalsX, yPosition);
+            pdf.text(`$${(sale.total_amount || 0).toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+            yPosition += 10;
+
+            // Payment method
+            if (sale.payment_method) {
+                pdf.setFont(undefined, 'normal');
+                pdf.setFontSize(10);
+                pdf.text(`Método de Pago: ${sale.payment_method}`, margin, yPosition);
+                yPosition += 8;
+            }
+
+            // Notes
+            if (sale.notes) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Notas:', margin, yPosition);
+                yPosition += 5;
+                pdf.setFont(undefined, 'normal');
+                const noteLines = pdf.splitTextToSize(sale.notes, pageWidth - 2 * margin);
+                pdf.text(noteLines, margin, yPosition);
+                yPosition += noteLines.length * 4;
+            }
+
+            // Footer
+            pdf.setFont(undefined, 'italic');
+            pdf.setFontSize(8);
+            pdf.text('Gracias por su compra', margin, pageWidth - 10, { align: 'center' });
+
+            // Return PDF as buffer (not blob for Node.js)
+            const pdfBuffer = Buffer.from(pdf.output('arraybuffer'));
+
+            // Check if this is a preview request
+            const isPreview = req.query.preview === 'true';
+
+            res.setHeader('Content-Type', 'application/pdf');
+            if (isPreview) {
+                res.setHeader('Content-Disposition', `inline; filename="Receipt-${sale.customer_name}-${new Date().toISOString().split('T')[0]}.pdf"`);
+            } else {
+                res.setHeader('Content-Disposition', `attachment; filename="Receipt-${sale.customer_name}-${new Date().toISOString().split('T')[0]}.pdf"`);
+            }
+
+            res.send(pdfBuffer);
+
+            logger.business('receipt_downloaded', 'sale', req.user.id, {
+                saleId: id,
+                companyId: req.companyId
+            });
+
+        } catch (error) {
+            ResponseHandler.handleError(res, error, 'SaleController.generateReceiptPdf');
+        }
+    }
+
+    /**
+     * Generate receipt (for API compatibility)
+     * POST /api/v1/sales/:id/receipt
+     */
+    static async generateReceipt(req, res) {
+        try {
+            const { id } = req.params;
+
+            const sale = await SaleModel.findById(id, req.companyId);
+            if (!sale) {
+                return ResponseHandler.notFound(res, 'Sale');
+            }
+
+            // For now, just return success
+            // In a real implementation, you might want to store the PDF URL
+            ResponseHandler.success(res, {
+                pdf_url: `/sales/${id}/receipt-pdf?preview=true`,
+                message: 'Receipt generated successfully'
+            });
+
+            logger.business('receipt_generated', 'sale', req.user.id, {
+                saleId: id,
+                companyId: req.companyId
+            });
+
+        } catch (error) {
+            ResponseHandler.handleError(res, error, 'SaleController.generateReceipt');
+        }
+    }
+
+    /**
+     * Extract serial number from image using OCR
+     * POST /api/v1/sales/ocr
+     */
+    static async extractSerialNumberOCR(req, res) {
+        try {
+            // Check if file was uploaded
+            if (!req.file) {
+                return ResponseHandler.error(res, 'No image file provided', 400);
+            }
+
+            const imageBuffer = req.file.buffer;
+
+            // Validate image
+            const validation = await CloudinaryStorageService.validateImageFile(
+                imageBuffer,
+                req.file.originalname
+            );
+
+            if (!validation.valid) {
+                return ResponseHandler.error(res, validation.error, 400);
+            }
+
+            // Extract serial number using OCR
+            const ocrResult = await OCRService.extractSerialNumber(imageBuffer);
+
+            if (!ocrResult.success) {
+                return ResponseHandler.error(res, ocrResult.error || 'Failed to extract serial number', 400);
+            }
+
+            logger.business('ocr_serial_extracted', 'ocr', req.user.id, {
+                companyId: req.companyId,
+                serialNumber: ocrResult.serialNumber,
+                confidence: ocrResult.confidence
+            });
+
+            ResponseHandler.success(res, {
+                serial_number: ocrResult.serialNumber,
+                confidence: ocrResult.confidence,
+                candidates: ocrResult.candidates || [],
+                ocr_text: ocrResult.ocrText
+            });
+
+        } catch (error) {
+            ResponseHandler.handleError(res, error, 'SaleController.extractSerialNumberOCR');
         }
     }
 }

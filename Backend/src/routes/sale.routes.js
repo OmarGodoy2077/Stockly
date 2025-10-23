@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import SaleController from '../controllers/sale.controller.js';
 import { authenticateJWT } from '../middlewares/auth.middleware.js';
 import { setCompanyContext, checkResourcePermission } from '../middlewares/role.middleware.js';
@@ -7,9 +8,63 @@ import { schemas } from '../validations/sale.schema.js';
 
 const router = express.Router();
 
+// Configure multer for file uploads (memory storage for OCR)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept only image files
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'), false);
+        }
+    }
+});
+
 // All sale routes require authentication and company context
 router.use(authenticateJWT);
 router.use(setCompanyContext);
+
+/**
+ * @swagger
+ * /api/v1/sales/ocr:
+ *   post:
+ *     summary: Extract serial number from image using OCR
+ *     tags: [Sales]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image file containing serial number
+ *     responses:
+ *       200:
+ *         description: Serial number extracted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 serial_number:
+ *                   type: string
+ *                 confidence:
+ *                   type: number
+ *                 candidates:
+ *                   type: array
+ *       400:
+ *         description: Invalid image or OCR failed
+ */
+router.post('/ocr', checkResourcePermission('sale', 'create'), upload.single('image'), SaleController.extractSerialNumberOCR);
 
 /**
  * @swagger
@@ -164,5 +219,51 @@ router.put('/:id', checkResourcePermission('sale', 'update'), SaleController.upd
  *       - bearerAuth: []
  */
 router.delete('/:id', checkResourcePermission('sale', 'delete'), SaleController.delete);
+
+/**
+ * @swagger
+ * /api/v1/sales/{id}/receipt-pdf:
+ *   get:
+ *     summary: Download sale receipt as PDF
+ *     tags: [Sales]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: PDF receipt downloaded
+ *       404:
+ *         description: Sale not found
+ */
+router.get('/:id/receipt-pdf', checkResourcePermission('sale', 'read'), SaleController.generateReceiptPdf);
+
+/**
+ * @swagger
+ * /api/v1/sales/{id}/receipt:
+ *   post:
+ *     summary: Generate receipt for sale
+ *     tags: [Sales]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Receipt generated
+ *       404:
+ *         description: Sale not found
+ */
+router.post('/:id/receipt', checkResourcePermission('sale', 'read'), SaleController.generateReceipt);
 
 export default router;

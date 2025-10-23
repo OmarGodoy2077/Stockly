@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getUsers, removeUserFromCompany } from '../../services/userService';
+import { showToast } from '../../utils/toast';
 
 interface User {
   id: string;
@@ -35,9 +36,10 @@ const UserList = () => {
     if (window.confirm('¿Estás seguro de eliminar este usuario?')) {
       try {
         await removeUserFromCompany(id);
+        showToast.success('Usuario eliminado correctamente');
         fetchUsers();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Error al eliminar usuario');
+        showToast.error(err.response?.data?.message || 'Error al eliminar usuario');
       }
     }
   };

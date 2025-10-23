@@ -1,6 +1,7 @@
 ﻿import { database } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import DateUtils from '../utils/dateUtils.js';
+import ProductModel from './product.model.js';
 
 class SaleModel {
 
@@ -195,15 +196,61 @@ class SaleModel {
 
     static async delete(saleId, companyId) {
         try {
-            const { error } = await database.supabase
+            // First, get the sale details to retrieve products
+            const { data: sale, error: fetchError } = await database.supabase
+                .from('sales')
+                .select('*')
+                .eq('id', saleId)
+                .eq('company_id', companyId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            if (!sale) throw new Error('Sale not found');
+
+            // Parse products array if it's a JSON string
+            let products = sale.products || [];
+            if (typeof products === 'string') {
+                try {
+                    products = JSON.parse(products);
+                } catch (e) {
+                    logger.warn('Could not parse products JSON:', e);
+                    products = [];
+                }
+            }
+
+            // Delete the sale
+            const { error: deleteError } = await database.supabase
                 .from('sales')
                 .delete()
                 .eq('id', saleId)
                 .eq('company_id', companyId);
 
-            if (error) throw error;
+            if (deleteError) throw deleteError;
 
-            logger.business('sale_deleted', 'sale', saleId, { companyId });
+            // Return stock for each product
+            for (const product of products) {
+                try {
+                    await ProductModel.updateStock(
+                        product.product_id,
+                        companyId,
+                        product.quantity,
+                        'add'
+                    );
+
+                    logger.business('stock_updated', 'product', product.product_id, {
+                        companyId,
+                        operation: 'add',
+                        quantity: product.quantity,
+                        reason: 'sale_deleted',
+                        saleId
+                    });
+                } catch (stockError) {
+                    logger.error('Error returning stock for product:', stockError);
+                    // Continue with other products even if one fails
+                }
+            }
+
+            logger.business('sale_deleted', 'sale', saleId, { companyId, productsCount: products.length });
             return true;
         } catch (error) {
             logger.error('Error deleting sale:', error);

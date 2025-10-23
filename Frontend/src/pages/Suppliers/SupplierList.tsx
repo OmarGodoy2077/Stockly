@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSuppliers, deleteSupplier } from '../../services/supplierService';
+import { showToast } from '../../utils/toast';
 
 interface Supplier {
   id: string;
@@ -35,9 +36,10 @@ const SupplierList = () => {
     if (window.confirm('¿Estás seguro de eliminar este proveedor?')) {
       try {
         await deleteSupplier(id);
+        showToast.success('Proveedor eliminado correctamente');
         fetchSuppliers();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Error al eliminar proveedor');
+        showToast.error(err.response?.data?.message || 'Error al eliminar proveedor');
       }
     }
   };

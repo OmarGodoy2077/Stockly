@@ -1,7 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useEffect, useState } from 'react'
+import { Toaster } from 'react-hot-toast'
 import './App.css'
+
+// Contexts
+import { ThemeProvider } from './context/ThemeContext'
 
 // Layouts
 import AuthenticatedLayout from './layouts/AuthenticatedLayout'
@@ -19,6 +23,7 @@ import Dashboard from './pages/Dashboard'
 import ProductList from './pages/Inventory/ProductList'
 import ProductDetail from './pages/Inventory/ProductDetail'
 import ProductAdd from './pages/Inventory/ProductAdd'
+import SalesList from './pages/Sales/SalesList'
 import NewSale from './pages/Sales/NewSale'
 import PurchaseList from './pages/Purchases/PurchaseList'
 import InvoiceList from './pages/Invoices/InvoiceList'
@@ -31,7 +36,7 @@ import UserList from './pages/Users/UserList'
 import WarrantyList from './pages/Warranties/WarrantyList'
 import InvitationList from './pages/Invitations/InvitationList'
 
-function App() {
+function AppContent() {
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
   const dispatch = useDispatch();
   const [isInitializing, setIsInitializing] = useState(true);
@@ -73,7 +78,7 @@ function App() {
   }, [dispatch]);
 
   if (isInitializing) {
-    return <div className="flex items-center justify-center min-h-screen">Inicializando...</div>;
+    return <div className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Inicializando...</div>;
   }
 
   return (
@@ -107,7 +112,8 @@ function App() {
             <Route path=":id" element={<ProductDetail />} />
           </Route>
           <Route path="/sales">
-            <Route index element={<NewSale />} />
+            <Route index element={<SalesList />} />
+            <Route path="new" element={<NewSale />} />
           </Route>
           <Route path="/purchases">
             <Route index element={<PurchaseList />} />
@@ -130,6 +136,15 @@ function App() {
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>
+  )
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+      <Toaster position="bottom-right" />
+    </ThemeProvider>
   )
 }
 

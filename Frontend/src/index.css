@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@dark-mode class;
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -15,6 +17,12 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root.dark {
+  color-scheme: dark;
+  color: #f3f4f6;
+  background-color: #111827;
+}
+
 a {
   font-weight: 500;
   color: #2563eb;
@@ -22,6 +30,13 @@ a {
 }
 a:hover {
   color: #1d4ed8;
+}
+
+:root.dark a {
+  color: #60a5fa;
+}
+:root.dark a:hover {
+  color: #3b82f6;
 }
 
 body {
@@ -32,10 +47,19 @@ body {
   color: #1f2937;
 }
 
+:root.dark body {
+  background-color: #111827;
+  color: #f3f4f6;
+}
+
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
   color: #111827;
+}
+
+:root.dark h1 {
+  color: #f9fafb;
 }
 
 button {
@@ -58,4 +82,14 @@ button:focus,
 button:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
+}
+
+:root.dark button {
+  border-color: #4b5563;
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+:root.dark button:hover {
+  border-color: #60a5fa;
+  background-color: #374151;
 }

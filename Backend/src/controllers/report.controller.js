@@ -3,6 +3,7 @@ import ProductModel from '../models/product.model.js';
 import { logger } from '../config/logger.js';
 import ResponseHandler from '../utils/responseHandler.js';
 import { database } from '../config/database.js';
+import DateUtils from '../utils/dateUtils.js';
 
 /**
  * Report controller - Handles report generation requests
@@ -787,37 +788,40 @@ class ReportController {
             const inRepairServices = servicesData?.filter(s => s.status === 'in_repair')?.length || 0;
 
             // Get sales data for different periods
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // Get dates in Guatemala timezone to match sale_date format
+            const todayGuatemala = DateUtils.getCurrentDateGuatemala();
+            const todayDateStr = DateUtils.formatLocal(todayGuatemala); // Format: YYYY-MM-DD
             
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            weekAgo.setHours(0, 0, 0, 0);
+            const weekAgoGuatemala = new Date(todayGuatemala);
+            weekAgoGuatemala.setDate(weekAgoGuatemala.getDate() - 7);
+            const weekAgoDateStr = DateUtils.formatLocal(weekAgoGuatemala); // Format: YYYY-MM-DD
             
-            const monthAgo = new Date();
-            monthAgo.setDate(monthAgo.getDate() - 30);
-            monthAgo.setHours(0, 0, 0, 0);
+            const monthAgoGuatemala = new Date(todayGuatemala);
+            monthAgoGuatemala.setDate(monthAgoGuatemala.getDate() - 30);
+            const monthAgoDateStr = DateUtils.formatLocal(monthAgoGuatemala); // Format: YYYY-MM-DD
 
             const { data: salesToday } = await database.supabase
                 .from('sales')
                 .select('total_amount')
                 .eq('company_id', companyId)
                 .eq('is_active', true)
-                .gte('sale_date', today.toISOString());
+                .eq('sale_date', todayDateStr);
 
             const { data: salesWeek } = await database.supabase
                 .from('sales')
                 .select('total_amount')
                 .eq('company_id', companyId)
                 .eq('is_active', true)
-                .gte('sale_date', weekAgo.toISOString());
+                .gte('sale_date', weekAgoDateStr)
+                .lte('sale_date', todayDateStr);
 
             const { data: salesMonth } = await database.supabase
                 .from('sales')
                 .select('total_amount')
                 .eq('company_id', companyId)
                 .eq('is_active', true)
-                .gte('sale_date', monthAgo.toISOString());
+                .gte('sale_date', monthAgoDateStr)
+                .lte('sale_date', todayDateStr);
 
             const outOfStockCount = productsData?.filter(p => p.stock === 0)?.length || 0;
 

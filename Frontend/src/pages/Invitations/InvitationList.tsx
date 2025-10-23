@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getInvitations, createInvitation, deleteInvitation } from '../../services/invitationService';
 import { useSelector } from 'react-redux';
+import { showToast } from '../../utils/toast';
 import type { RootState } from '../../store';
 
 interface Invitation {
@@ -40,7 +41,7 @@ const InvitationList = () => {
     try {
       const companyId = user?.companies?.[0]?.id;
       if (!companyId) {
-        alert('No se pudo obtener el ID de la empresa');
+        showToast.warning('No se pudo obtener el ID de la empresa');
         return;
       }
       
@@ -48,10 +49,11 @@ const InvitationList = () => {
         companyId,
         role: selectedRole,
       });
+      showToast.success('Invitación creada correctamente');
       setShowModal(false);
       fetchInvitations();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Error al crear invitación');
+      showToast.error(err.response?.data?.message || 'Error al crear invitación');
     }
   };
 
@@ -59,9 +61,10 @@ const InvitationList = () => {
     if (window.confirm('¿Estás seguro de eliminar esta invitación?')) {
       try {
         await deleteInvitation(id);
+        showToast.success('Invitación eliminada correctamente');
         fetchInvitations();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Error al eliminar invitación');
+        showToast.error(err.response?.data?.message || 'Error al eliminar invitación');
       }
     }
   };

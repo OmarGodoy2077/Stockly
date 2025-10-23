@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getWarranties, deactivateWarranty } from '../../services/warrantyService';
+import { showToast } from '../../utils/toast';
 
 interface Warranty {
   id: string;
@@ -39,9 +40,10 @@ const WarrantyList = () => {
     if (window.confirm('¿Estás seguro de desactivar esta garantía?')) {
       try {
         await deactivateWarranty(id);
+        showToast.success('Garantía desactivada correctamente');
         fetchWarranties();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Error al desactivar garantía');
+        showToast.error(err.response?.data?.message || 'Error al desactivar garantía');
       }
     }
   };

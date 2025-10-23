@@ -81,13 +81,12 @@ class InvoiceController {
                 }
             }
 
-            // Calculate invoice totals
+            // Calculate invoice totals (without taxes)
             const subtotal = sale.subtotal + additionalItemsTotal;
-            const taxPercentage = 12; // Default IVA
-            const taxableAmount = subtotal;
-            const taxAmount = taxableAmount * (taxPercentage / 100);
             const discountAmount = sale.discount_amount || 0;
-            const totalAmount = subtotal + taxAmount - discountAmount;
+            const taxAmount = 0; // No taxes
+            const taxPercentage = 0;
+            const totalAmount = subtotal - discountAmount;
 
             // Create invoice
             const invoiceData = {
