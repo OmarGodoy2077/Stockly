@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS products (
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     sku VARCHAR(100) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    brand VARCHAR(255),
     description TEXT,
     price DECIMAL(10,2) NOT NULL DEFAULT 0,
     stock INTEGER NOT NULL DEFAULT 0,
@@ -204,6 +205,7 @@ CREATE TABLE IF NOT EXISTS sales (
     serial_image_url TEXT, -- Original image URL from Firebase
     warranty_months INTEGER DEFAULT 12,
     payment_method VARCHAR(100),
+    sales_platform VARCHAR(50) DEFAULT 'direct' CHECK (sales_platform IN ('direct', 'amazon', 'ebay', 'shopify', 'facebook', 'instagram', 'tiktok', 'whatsapp', 'marketplace', 'otros')),
     sale_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -389,6 +391,7 @@ CREATE INDEX IF NOT EXISTS idx_products_sku ON products(company_id, sku);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock);
 CREATE INDEX IF NOT EXISTS idx_products_condition ON products(condition);
+CREATE INDEX IF NOT EXISTS idx_products_brand ON products(company_id, brand);
 
 -- Sales indexes
 CREATE INDEX IF NOT EXISTS idx_sales_company_id ON sales(company_id);

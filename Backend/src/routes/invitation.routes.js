@@ -1,6 +1,7 @@
 import express from 'express';
 import InvitationController from '../controllers/invitation.controller.js';
 import { authenticateJWT } from '../middlewares/auth.middleware.js';
+import { setCompanyContext } from '../middlewares/role.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import { z } from 'zod';
 
@@ -28,6 +29,7 @@ const validateInvitationSchema = z.object({
 router.post(
     '/',
     authenticateJWT,
+    setCompanyContext,
     validate(createInvitationSchema, 'body'),
     InvitationController.createInvitation
 );
@@ -41,6 +43,7 @@ router.post(
 router.get(
     '/',
     authenticateJWT,
+    setCompanyContext,
     InvitationController.getInvitations
 );
 
@@ -48,6 +51,7 @@ router.get(
  * @route   GET /api/v1/invitations/validate/:code
  * @desc    Validate an invitation code (public)
  * @access  Public
+ * NOTE: This must come BEFORE the /:id route for proper matching
  */
 router.get(
     '/validate/:code',
@@ -55,13 +59,14 @@ router.get(
 );
 
 /**
- * @route   DELETE /api/v1/invitations/:code
+ * @route   DELETE /api/v1/invitations/:id
  * @desc    Deactivate an invitation code (owner only)
  * @access  Private - Owner
  */
 router.delete(
-    '/:code',
+    '/:id',
     authenticateJWT,
+    setCompanyContext,
     InvitationController.deactivateInvitation
 );
 
@@ -73,6 +78,7 @@ router.delete(
 router.get(
     '/company/:companyId',
     authenticateJWT,
+    setCompanyContext,
     InvitationController.getCompanyInvitations
 );
 

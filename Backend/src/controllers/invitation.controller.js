@@ -119,12 +119,13 @@ class InvitationController {
     static async getInvitations(req, res) {
         try {
             const userId = req.user.id;
-            const { companyId } = req.query;
+            // Get companyId from middleware context (now always set by setCompanyContext)
+            const companyId = req.companyId;
 
             if (!companyId) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Company ID is required'
+                    error: 'Company ID is required. Make sure you are logged in and have selected a company.'
                 });
             }
 
@@ -221,24 +222,24 @@ class InvitationController {
 
     /**
      * Deactivate invitation code
-     * DELETE /api/v1/invitations/{code}
+     * DELETE /api/v1/invitations/{id}
      * 
      * Solo owners pueden deactivar invitaciones
      */
     static async deactivateInvitation(req, res) {
         try {
             const userId = req.user.id;
-            const { code } = req.params;
+            const { id } = req.params;
 
-            if (!code) {
+            if (!id) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Invitation code is required'
+                    error: 'Invitation ID is required'
                 });
             }
 
-            // Get invitation to verify ownership
-            const invitation = await InvitationModel.findByCode(code);
+            // Get invitation by ID to verify ownership
+            const invitation = await InvitationModel.findById(id);
             if (!invitation) {
                 return res.status(404).json({
                     success: false,
@@ -255,7 +256,7 @@ class InvitationController {
             if (!isOwner) {
                 logger.security('unauthorized_invitation_deactivate', 'medium', {
                     userId,
-                    code,
+                    id,
                     ip: req.ip
                 });
                 return res.status(403).json({
@@ -264,11 +265,11 @@ class InvitationController {
                 });
             }
 
-            // Deactivate invitation
-            await InvitationModel.deactivate(code);
+            // Deactivate invitation by ID
+            await InvitationModel.deactivateById(id);
 
             logger.business('invitation_deactivated', 'company', invitation.company_id, {
-                code,
+                id,
                 deactivatedBy: userId
             });
 

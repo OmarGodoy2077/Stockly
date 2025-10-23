@@ -203,7 +203,7 @@ class InvoiceController {
                 invoiceNumber: invoice_number,
                 paymentStatus: payment_status,
                 isDraft: is_draft === 'true' ? true : (is_draft === 'false' ? false : null),
-                sortBy: sort_by,
+                sortBy: sort_by === 'date' ? 'invoice_date' : sort_by,
                 sortOrder: sort_order
             };
 

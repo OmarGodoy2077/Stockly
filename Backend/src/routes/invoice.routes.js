@@ -66,6 +66,8 @@ router.get('/', checkResourcePermission('invoice', 'read'), InvoiceController.ge
  * Query params:
  * - start_date: YYYY-MM-DD (optional)
  * - end_date: YYYY-MM-DD (optional)
+ * 
+ * NOTE: This route must come BEFORE /:id to be matched correctly
  */
 router.get('/statistics', checkResourcePermission('invoice', 'read'), InvoiceController.getStatistics);
 

@@ -1,139 +1,107 @@
-import { database } from '../config/database.js';
+﻿import { database } from '../config/database.js';
 import { logger } from '../config/logger.js';
 
-/**
- * ProductAttribute model - Handles product attributes operations
- */
 class ProductAttributeModel {
 
-    /**
-     * Create a new product attribute
-     * @param {Object} attributeData - Attribute data
-     * @returns {Promise<Object>} Created attribute
-     */
-    static async create({
-        productId,
-        name,
-        value,
-        orderIndex = 0
-    }) {
+    static async create({ productId, name, value, orderIndex = 0 }) {
         try {
-            const query = `
-                INSERT INTO product_attributes (
-                    product_id, name, value, order_index
-                )
-                VALUES ($1, $2, $3, $4)
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('product_attributes')
+                .insert([{
+                    product_id: productId,
+                    name,
+                    value,
+                    order_index: orderIndex
+                }])
+                .select()
+                .single();
 
-            const result = await database.query(query, [
-                productId, name, value, orderIndex
-            ]);
+            if (error) {
+                if (error.code === '23505') {
+                    throw new Error(`Attribute "${name}" already exists for this product`);
+                }
+                throw error;
+            }
 
-            logger.business('product_attribute_created', 'product_attribute', result.rows[0].id, {
+            logger.business('product_attribute_created', 'product_attribute', data.id, {
                 productId,
                 name,
                 value
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error creating product attribute:', error);
-            if (error.code === '23505') { // Unique violation
-                throw new Error(`Attribute "${name}" already exists for this product`);
-            }
             throw error;
         }
     }
 
-    /**
-     * Find attributes by product ID
-     * @param {string} productId - Product ID
-     * @returns {Promise<Array>} Product attributes
-     */
     static async findByProductId(productId) {
         try {
-            const query = `
-                SELECT *
-                FROM product_attributes
-                WHERE product_id = $1
-                ORDER BY order_index ASC, name ASC
-            `;
+            const { data, error } = await database.supabase
+                .from('product_attributes')
+                .select('*')
+                .eq('product_id', productId)
+                .order('order_index', { ascending: true })
+                .order('name', { ascending: true });
 
-            const result = await database.query(query, [productId]);
+            if (error) throw error;
 
-            return result.rows;
+            return data || [];
         } catch (error) {
             logger.error('Error finding product attributes:', error);
             throw error;
         }
     }
 
-    /**
-     * Find attribute by ID
-     * @param {string} attributeId - Attribute ID
-     * @returns {Promise<Object|null>} Attribute data or null
-     */
     static async findById(attributeId) {
         try {
-            const query = `
-                SELECT *
-                FROM product_attributes
-                WHERE id = $1
-            `;
+            const { data, error } = await database.supabase
+                .from('product_attributes')
+                .select('*')
+                .eq('id', attributeId)
+                .single();
 
-            const result = await database.query(query, [attributeId]);
+            if (error && error.code !== 'PGRST116') throw error;
 
-            if (result.rows.length === 0) {
-                return null;
-            }
-
-            return result.rows[0];
+            return data || null;
         } catch (error) {
             logger.error('Error finding product attribute by ID:', error);
             throw error;
         }
     }
 
-    /**
-     * Update product attribute
-     * @param {string} attributeId - Attribute ID
-     * @param {string} productId - Product ID (for security)
-     * @param {Object} updates - Fields to update
-     * @returns {Promise<Object>} Updated attribute
-     */
     static async update(attributeId, productId, updates) {
         try {
             const allowedFields = ['name', 'value', 'order_index'];
-            const fields = [];
-            const values = [];
-            let paramCount = 1;
-
+            const updateData = {};
+            
             Object.keys(updates).forEach(key => {
                 if (allowedFields.includes(key)) {
-                    fields.push(`${key} = $${paramCount}`);
-                    values.push(updates[key]);
-                    paramCount++;
+                    updateData[key] = updates[key];
                 }
             });
 
-            if (fields.length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 throw new Error('No valid fields to update');
             }
 
-            values.push(attributeId);
-            values.push(productId);
+            const { data, error } = await database.supabase
+                .from('product_attributes')
+                .update(updateData)
+                .eq('id', attributeId)
+                .eq('product_id', productId)
+                .select()
+                .single();
 
-            const query = `
-                UPDATE product_attributes
-                SET ${fields.join(', ')}, updated_at = NOW()
-                WHERE id = $${paramCount} AND product_id = $${paramCount + 1}
-                RETURNING *
-            `;
+            if (error) {
+                if (error.code === '23505') {
+                    throw new Error('Attribute name already exists for this product');
+                }
+                throw error;
+            }
 
-            const result = await database.query(query, values);
-
-            if (result.rows.length === 0) {
+            if (!data) {
                 throw new Error('Product attribute not found');
             }
 
@@ -142,34 +110,22 @@ class ProductAttributeModel {
                 updatedFields: Object.keys(updates)
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error updating product attribute:', error);
-            if (error.code === '23505') {
-                throw new Error('Attribute name already exists for this product');
-            }
             throw error;
         }
     }
 
-    /**
-     * Delete product attribute
-     * @param {string} attributeId - Attribute ID
-     * @param {string} productId - Product ID (for security)
-     * @returns {Promise<boolean>} Success status
-     */
     static async delete(attributeId, productId) {
         try {
-            const query = `
-                DELETE FROM product_attributes
-                WHERE id = $1 AND product_id = $2
-            `;
+            const { error } = await database.supabase
+                .from('product_attributes')
+                .delete()
+                .eq('id', attributeId)
+                .eq('product_id', productId);
 
-            const result = await database.query(query, [attributeId, productId]);
-
-            if (result.rowCount === 0) {
-                throw new Error('Product attribute not found');
-            }
+            if (error) throw error;
 
             logger.business('product_attribute_deleted', 'product_attribute', attributeId, {
                 productId
@@ -182,12 +138,6 @@ class ProductAttributeModel {
         }
     }
 
-    /**
-     * Add multiple attributes to a product
-     * @param {string} productId - Product ID
-     * @param {Array} attributes - Array of {name, value} objects
-     * @returns {Promise<Array>} Created attributes
-     */
     static async createMultiple(productId, attributes) {
         try {
             const createdAttributes = [];
@@ -210,21 +160,17 @@ class ProductAttributeModel {
         }
     }
 
-    /**
-     * Delete all attributes for a product
-     * @param {string} productId - Product ID
-     * @returns {Promise<number>} Number of deleted attributes
-     */
     static async deleteByProductId(productId) {
         try {
-            const query = `
-                DELETE FROM product_attributes
-                WHERE product_id = $1
-            `;
+            const { data, error } = await database.supabase
+                .from('product_attributes')
+                .delete()
+                .eq('product_id', productId)
+                .select();
 
-            const result = await database.query(query, [productId]);
+            if (error) throw error;
 
-            return result.rowCount;
+            return data ? data.length : 0;
         } catch (error) {
             logger.error('Error deleting product attributes:', error);
             throw error;

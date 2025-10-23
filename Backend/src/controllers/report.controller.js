@@ -2,6 +2,7 @@ import ReportService from '../services/report.service.js';
 import ProductModel from '../models/product.model.js';
 import { logger } from '../config/logger.js';
 import ResponseHandler from '../utils/responseHandler.js';
+import { database } from '../config/database.js';
 
 /**
  * Report controller - Handles report generation requests
@@ -115,20 +116,32 @@ class ReportController {
             }
 
             // Get sales data
-            const query = `
-                SELECT
-                    s.*,
-                    p.name as product_name,
-                    p.sku
-                FROM sales s
-                LEFT JOIN products p ON s.products->0->>'product_id' = p.id::text
-                WHERE s.company_id = $1${dateFilter}
-                ORDER BY s.sale_date DESC
-            `;
+            let query = database.supabase
+                .from('sales')
+                .select('*')
+                .eq('company_id', req.companyId);
 
-            const result = await database.query(query, params);
+            if (start_date) {
+                query = query.gte('sale_date', start_date);
+            }
 
-            if (result.rows.length === 0) {
+            if (end_date) {
+                query = query.lte('sale_date', end_date);
+            }
+
+            if (customer_name) {
+                query = query.ilike('customer_name', `%${customer_name}%`);
+            }
+
+            query = query.order('sale_date', { ascending: false });
+
+            const { data: result, error: queryError } = await query;
+
+            if (queryError) {
+                throw queryError;
+            }
+
+            if (!result || result.length === 0) {
                 return ResponseHandler.error(res, 'No sales found for the report', 404);
             }
 
@@ -144,20 +157,20 @@ class ReportController {
 
             switch (format.toLowerCase()) {
                 case 'pdf':
-                    buffer = await ReportService.generatePDF(result.rows, reportOptions);
+                    buffer = await ReportService.generatePDF(result, reportOptions);
                     mimeType = 'application/pdf';
                     fileName = `reporte-ventas-${new Date().toISOString().split('T')[0]}.pdf`;
                     break;
 
                 case 'csv':
-                    buffer = ReportService.generateCSV(result.rows, reportOptions);
+                    buffer = ReportService.generateCSV(result, reportOptions);
                     mimeType = 'text/csv';
                     fileName = `reporte-ventas-${new Date().toISOString().split('T')[0]}.csv`;
                     break;
 
                 case 'excel':
                 default:
-                    buffer = await ReportService.generateSalesReport(result.rows, reportOptions);
+                    buffer = await ReportService.generateSalesReport(result, reportOptions);
                     mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
                     fileName = `reporte-ventas-${new Date().toISOString().split('T')[0]}.xlsx`;
                     break;
@@ -166,7 +179,7 @@ class ReportController {
             logger.business('sales_report_generated', 'report', req.user.id, {
                 companyId: req.companyId,
                 format,
-                salesCount: result.rows.length
+                salesCount: result.length
             });
 
             ResponseHandler.fileDownload(res, buffer, fileName, mimeType);
@@ -207,22 +220,53 @@ class ReportController {
             }
 
             // Get warranties data
-            const query = `
-                SELECT
-                    w.*,
-                    c.name as company_name,
-                    EXTRACT(DAYS FROM (w.expires_at - CURRENT_DATE)) as days_to_expiry
-                FROM warranties w
-                JOIN companies c ON w.company_id = c.id
-                WHERE w.company_id = $1 ${statusFilter}
-                ORDER BY w.expires_at ASC
-            `;
+            let query = database.supabase
+                .from('warranties')
+                .select(`
+                    *,
+                    companies(name)
+                `)
+                .eq('company_id', req.companyId);
 
-            const result = await database.query(query, [req.companyId]);
+            // Apply status filter
+            switch (status) {
+                case 'active':
+                    query = query
+                        .eq('is_active', true)
+                        .gt('expires_at', new Date().toISOString().split('T')[0]);
+                    break;
+                case 'expired':
+                    query = query
+                        .or(`is_active.eq.false,expires_at.lte.${new Date().toISOString().split('T')[0]}`);
+                    break;
+                case 'expiring':
+                    const futureDate = new Date();
+                    futureDate.setDate(futureDate.getDate() + parseInt(expiring_days || 30));
+                    query = query
+                        .eq('is_active', true)
+                        .lte('expires_at', futureDate.toISOString().split('T')[0]);
+                    break;
+                // 'all' doesn't need filter
+            }
 
-            if (result.rows.length === 0) {
+            query = query.order('expires_at', { ascending: true });
+
+            const { data: result, error: queryError } = await query;
+
+            if (queryError) {
+                throw queryError;
+            }
+
+            if (!result || result.length === 0) {
                 return ResponseHandler.error(res, 'No warranties found for the report', 404);
             }
+
+            // Map result to include computed days_to_expiry
+            const mappedResult = result.map(w => ({
+                ...w,
+                company_name: w.companies?.name,
+                days_to_expiry: Math.ceil((new Date(w.expires_at) - new Date()) / (1000 * 60 * 60 * 24))
+            }));
 
             // Generate report
             let buffer;
@@ -236,20 +280,20 @@ class ReportController {
 
             switch (format.toLowerCase()) {
                 case 'pdf':
-                    buffer = await ReportService.generatePDF(result.rows, reportOptions);
+                    buffer = await ReportService.generatePDF(mappedResult, reportOptions);
                     mimeType = 'application/pdf';
                     fileName = `reporte-garantias-${new Date().toISOString().split('T')[0]}.pdf`;
                     break;
 
                 case 'csv':
-                    buffer = ReportService.generateCSV(result.rows, reportOptions);
+                    buffer = ReportService.generateCSV(mappedResult, reportOptions);
                     mimeType = 'text/csv';
                     fileName = `reporte-garantias-${new Date().toISOString().split('T')[0]}.csv`;
                     break;
 
                 case 'excel':
                 default:
-                    buffer = await ReportService.generateWarrantyReport(result.rows, reportOptions);
+                    buffer = await ReportService.generateWarrantyReport(mappedResult, reportOptions);
                     mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
                     fileName = `reporte-garantias-${new Date().toISOString().split('T')[0]}.xlsx`;
                     break;
@@ -258,7 +302,7 @@ class ReportController {
             logger.business('warranty_report_generated', 'report', req.user.id, {
                 companyId: req.companyId,
                 format,
-                warrantyCount: result.rows.length,
+                warrantyCount: result.length,
                 status
             });
 
@@ -313,23 +357,49 @@ class ReportController {
             }
 
             // Get service history data
-            const query = `
-                SELECT
-                    sh.*,
-                    c.name as company_name,
-                    u.name as technician_name
-                FROM service_histories sh
-                JOIN companies c ON sh.company_id = c.id
-                LEFT JOIN users u ON sh.technician_id = u.id
-                WHERE sh.company_id = $1${filters}
-                ORDER BY sh.entry_date DESC
-            `;
+            let query = database.supabase
+                .from('service_histories')
+                .select(`
+                    *,
+                    companies(name),
+                    technician_user:technician_id (name)
+                `)
+                .eq('company_id', req.companyId);
 
-            const result = await database.query(query, params);
+            if (start_date) {
+                query = query.gte('entry_date', start_date);
+            }
 
-            if (result.rows.length === 0) {
+            if (end_date) {
+                query = query.lte('entry_date', end_date);
+            }
+
+            if (status) {
+                query = query.eq('status', status);
+            }
+
+            if (technician) {
+                query = query.eq('technician_id', technician);
+            }
+
+            query = query.order('entry_date', { ascending: false });
+
+            const { data: result, error: queryError } = await query;
+
+            if (queryError) {
+                throw queryError;
+            }
+
+            if (!result || result.length === 0) {
                 return ResponseHandler.error(res, 'No service records found for the report', 404);
             }
+
+            // Map result to include computed fields
+            const mappedResult = result.map(sh => ({
+                ...sh,
+                company_name: sh.companies?.name,
+                technician_name: sh.technician_user?.name
+            }));
 
             // Generate report
             let buffer;
@@ -343,20 +413,20 @@ class ReportController {
 
             switch (format.toLowerCase()) {
                 case 'pdf':
-                    buffer = await ReportService.generatePDF(result.rows, reportOptions);
+                    buffer = await ReportService.generatePDF(mappedResult, reportOptions);
                     mimeType = 'application/pdf';
                     fileName = `reporte-servicio-${new Date().toISOString().split('T')[0]}.pdf`;
                     break;
 
                 case 'csv':
-                    buffer = ReportService.generateCSV(result.rows, reportOptions);
+                    buffer = ReportService.generateCSV(mappedResult, reportOptions);
                     mimeType = 'text/csv';
                     fileName = `reporte-servicio-${new Date().toISOString().split('T')[0]}.csv`;
                     break;
 
                 case 'excel':
                 default:
-                    buffer = await ReportService.generateServiceReport(result.rows, reportOptions);
+                    buffer = await ReportService.generateServiceReport(mappedResult, reportOptions);
                     mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
                     fileName = `reporte-servicio-${new Date().toISOString().split('T')[0]}.xlsx`;
                     break;
@@ -365,7 +435,7 @@ class ReportController {
             logger.business('service_report_generated', 'report', req.user.id, {
                 companyId: req.companyId,
                 format,
-                serviceCount: result.rows.length
+                serviceCount: result.length
             });
 
             ResponseHandler.fileDownload(res, buffer, fileName, mimeType);
@@ -440,61 +510,69 @@ class ReportController {
                 include_monthly_breakdown = true
             } = req.query;
 
-            // Import database for raw queries
-            const { database } = await import('../config/database.js');
-
-            // Build date filters
-            let dateFilter = '';
-            const params = [req.companyId];
+            // Get purchase data (costs)
+            let purchaseQuery = database.supabase
+                .from('purchases')
+                .select('cost_amount, sell_amount, profit_amount, profit_margin_percent')
+                .eq('company_id', req.companyId);
 
             if (start_date) {
-                dateFilter += ` AND p.purchase_date >= $${params.length + 1}`;
-                params.push(start_date);
+                purchaseQuery = purchaseQuery.gte('purchase_date', start_date);
             }
 
             if (end_date) {
-                dateFilter += ` AND p.purchase_date <= $${params.length + 1}`;
-                params.push(end_date);
+                purchaseQuery = purchaseQuery.lte('purchase_date', end_date);
             }
 
-            // Get purchase data (costs)
-            const purchaseQuery = `
-                SELECT
-                    SUM(p.cost_amount) as total_cost,
-                    SUM(p.sell_amount) as total_potential_revenue,
-                    SUM(p.profit_amount) as total_profit,
-                    AVG(p.profit_margin_percent) as avg_profit_margin,
-                    COUNT(p.id) as total_purchases
-                FROM purchases p
-                WHERE p.company_id = $1 ${dateFilter}
-            `;
+            const { data: purchaseData, error: purchaseError } = await purchaseQuery;
 
-            const purchaseResult = await database.query(purchaseQuery, params);
+            if (purchaseError) {
+                throw purchaseError;
+            }
 
             // Get sales data (actual revenue)
-            const salesQuery = `
-                SELECT
-                    SUM(s.total_amount) as total_revenue,
-                    COUNT(s.id) as total_sales,
-                    AVG(s.total_amount) as avg_sale_amount
-                FROM sales s
-                WHERE s.company_id = $1 AND s.sale_date >= COALESCE(
-                    $${params.length === 1 ? 2 : params.length + 1}::DATE, 
-                    s.sale_date - INTERVAL '90 days'
-                )
-                ${end_date ? `AND s.sale_date <= $${params.length + (start_date ? 3 : 2)}::DATE` : ''}
-            `;
+            let salesQuery = database.supabase
+                .from('sales')
+                .select('total_amount')
+                .eq('company_id', req.companyId);
 
-            const salesParams = [req.companyId, start_date || null, end_date || null];
-            const salesResult = await database.query(salesQuery, salesParams);
+            if (start_date) {
+                salesQuery = salesQuery.gte('sale_date', start_date);
+            } else {
+                // Default to last 90 days
+                const ninetyDaysAgo = new Date();
+                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+                salesQuery = salesQuery.gte('sale_date', ninetyDaysAgo.toISOString());
+            }
 
-            // Calculate executive summary
-            const purchaseData = purchaseResult.rows[0];
-            const salesData = salesResult.rows[0];
+            if (end_date) {
+                salesQuery = salesQuery.lte('sale_date', end_date);
+            }
 
-            const totalCost = parseFloat(purchaseData.total_cost) || 0;
-            const potentialRevenue = parseFloat(purchaseData.total_potential_revenue) || 0;
-            const actualRevenue = parseFloat(salesData.total_revenue) || 0;
+            const { data: salesData, error: salesError } = await salesQuery;
+
+            if (salesError) {
+                throw salesError;
+            }
+
+            // Calculate aggregates from the data
+            const purchaseStats = purchaseData.reduce((acc, p) => ({
+                total_cost: acc.total_cost + (p.cost_amount || 0),
+                total_potential_revenue: acc.total_potential_revenue + (p.sell_amount || 0),
+                total_profit: acc.total_profit + (p.profit_amount || 0),
+                avg_profit_margin: acc.count > 0 ? (acc.avg_profit_margin + (p.profit_margin_percent || 0)) / (acc.count + 1) : (p.profit_margin_percent || 0),
+                count: acc.count + 1
+            }), { total_cost: 0, total_potential_revenue: 0, total_profit: 0, avg_profit_margin: 0, count: 0 });
+
+            const salesStats = salesData.reduce((acc, s) => ({
+                total_revenue: acc.total_revenue + (s.total_amount || 0),
+                count: acc.count + 1,
+                avg_sale_amount: acc.total_revenue / (acc.count || 1)
+            }), { total_revenue: 0, count: 0, avg_sale_amount: 0 });
+
+            const totalCost = purchaseStats.total_cost;
+            const potentialRevenue = purchaseStats.total_potential_revenue;
+            const actualRevenue = salesStats.total_revenue;
             const projectedProfit = potentialRevenue - totalCost;
             const actualGain = actualRevenue - totalCost;
             const profitMargin = totalCost > 0 ? ((projectedProfit / totalCost) * 100) : 0;
@@ -502,29 +580,66 @@ class ReportController {
             // Get monthly breakdown if requested
             let monthlyData = [];
             if (include_monthly_breakdown === 'true' || include_monthly_breakdown === true) {
-                const monthlyQuery = `
-                    SELECT
-                        DATE_TRUNC('month', COALESCE(p.purchase_date, s.sale_date))::DATE as month,
-                        SUM(CASE WHEN p.id IS NOT NULL THEN p.cost_amount ELSE 0 END) as cost,
-                        SUM(CASE WHEN s.id IS NOT NULL THEN s.total_amount ELSE 0 END) as revenue
-                    FROM purchases p
-                    FULL OUTER JOIN sales s ON DATE_TRUNC('month', p.purchase_date) = DATE_TRUNC('month', s.sale_date)
-                        AND p.company_id = s.company_id
-                    WHERE (p.company_id = $1 OR s.company_id = $1)
-                    GROUP BY DATE_TRUNC('month', COALESCE(p.purchase_date, s.sale_date))
-                    ORDER BY month DESC
-                `;
+                // Get purchase data by month
+                let monthPurchaseQuery = database.supabase
+                    .from('purchases')
+                    .select('purchase_date, cost_amount, sell_amount')
+                    .eq('company_id', req.companyId);
 
-                const monthlyResult = await database.query(monthlyQuery, [req.companyId]);
-                monthlyData = monthlyResult.rows.map(row => ({
-                    month: row.month,
-                    cost: parseFloat(row.cost) || 0,
-                    revenue: parseFloat(row.revenue) || 0,
-                    gain: (parseFloat(row.revenue) || 0) - (parseFloat(row.cost) || 0),
-                    margin_percent: (parseFloat(row.cost) || 0) > 0 
-                        ? (((parseFloat(row.revenue) || 0) - (parseFloat(row.cost) || 0)) / (parseFloat(row.cost) || 0) * 100)
-                        : 0
-                }));
+                if (start_date) {
+                    monthPurchaseQuery = monthPurchaseQuery.gte('purchase_date', start_date);
+                }
+
+                if (end_date) {
+                    monthPurchaseQuery = monthPurchaseQuery.lte('purchase_date', end_date);
+                }
+
+                const { data: monthPurchaseData } = await monthPurchaseQuery;
+
+                // Get sales data by month
+                let monthSalesQuery = database.supabase
+                    .from('sales')
+                    .select('sale_date, total_amount')
+                    .eq('company_id', req.companyId);
+
+                if (start_date) {
+                    monthSalesQuery = monthSalesQuery.gte('sale_date', start_date);
+                }
+
+                if (end_date) {
+                    monthSalesQuery = monthSalesQuery.lte('sale_date', end_date);
+                }
+
+                const { data: monthSalesData } = await monthSalesQuery;
+
+                // Group by month
+                const monthlyMap = {};
+
+                (monthPurchaseData || []).forEach(p => {
+                    const month = new Date(p.purchase_date).toISOString().split('T')[0].substring(0, 7);
+                    if (!monthlyMap[month]) {
+                        monthlyMap[month] = { cost: 0, revenue: 0 };
+                    }
+                    monthlyMap[month].cost += p.cost_amount || 0;
+                });
+
+                (monthSalesData || []).forEach(s => {
+                    const month = new Date(s.sale_date).toISOString().split('T')[0].substring(0, 7);
+                    if (!monthlyMap[month]) {
+                        monthlyMap[month] = { cost: 0, revenue: 0 };
+                    }
+                    monthlyMap[month].revenue += s.total_amount || 0;
+                });
+
+                monthlyData = Object.entries(monthlyMap)
+                    .map(([month, data]) => ({
+                        month: month + '-01',
+                        cost: data.cost,
+                        revenue: data.revenue,
+                        gain: data.revenue - data.cost,
+                        margin_percent: data.cost > 0 ? ((data.revenue - data.cost) / data.cost * 100) : 0
+                    }))
+                    .sort((a, b) => new Date(b.month) - new Date(a.month));
             }
 
             // Build response
@@ -535,20 +650,20 @@ class ReportController {
                 },
                 cost_summary: {
                     total_purchase_cost: totalCost,
-                    total_purchases: parseInt(purchaseData.total_purchases) || 0,
-                    avg_purchase_cost: totalCost / (parseInt(purchaseData.total_purchases) || 1)
+                    total_purchases: purchaseStats.count || 0,
+                    avg_purchase_cost: purchaseStats.count > 0 ? totalCost / purchaseStats.count : 0
                 },
                 revenue_summary: {
                     total_actual_revenue: actualRevenue,
-                    total_sales: parseInt(salesData.total_sales) || 0,
-                    avg_sale_amount: parseFloat(salesData.avg_sale_amount) || 0,
+                    total_sales: salesStats.count || 0,
+                    avg_sale_amount: salesStats.avg_sale_amount || 0,
                     total_potential_revenue: potentialRevenue
                 },
                 profit_analysis: {
                     projected_profit: projectedProfit,
                     actual_gain: actualGain,
                     profit_margin_percent: parseFloat(profitMargin.toFixed(2)),
-                    avg_profit_margin_percent: parseFloat(purchaseData.avg_profit_margin) || 0
+                    avg_profit_margin_percent: parseFloat(purchaseStats.avg_profit_margin.toFixed(2)) || 0
                 },
                 monthly_breakdown: monthlyData
             };
@@ -572,6 +687,185 @@ class ReportController {
 
         } catch (error) {
             ResponseHandler.handleError(res, error, 'ReportController.generateCostVsRevenueReport');
+        }
+    }
+
+    /**
+     * Get dashboard metrics and summary
+     * GET /api/v1/reports/dashboard
+     */
+    static async getDashboard(req, res) {
+        try {
+            const companyId = req.companyId;
+
+            if (!companyId) {
+                console.log('[DASHBOARD] ERROR - No companyId found:', {
+                    reqCompanyId: req.companyId,
+                    userCompanyId: req.user?.companyId,
+                    user: req.user,
+                    hasUser: !!req.user
+                });
+                return res.status(400).json({
+                    success: false,
+                    error: 'Company ID is required',
+                    debug: {
+                        hasCompanyId: !!req.companyId,
+                        hasUser: !!req.user,
+                        hasUserCompanyId: !!req.user?.companyId,
+                        message: 'Make sure you are logged in with a company selected'
+                    }
+                });
+            }
+
+            // Get total products
+            const { data: productsData, error: productsError } = await database.supabase
+                .from('products')
+                .select('id, stock, price', { count: 'exact' })
+                .eq('company_id', companyId)
+                .eq('is_active', true);
+
+            const totalProducts = productsData?.length || 0;
+            const totalInventoryValue = productsData?.reduce((sum, p) => sum + (p.stock * p.price), 0) || 0;
+
+            // Get low stock products
+            const { data: lowStockData } = await database.supabase
+                .from('products')
+                .select('id, name, stock, min_stock')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .lt('stock', 'min_stock');
+
+            const lowStockCount = lowStockData?.length || 0;
+
+            // Get recent sales (last 7 days)
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            const { data: salesData } = await database.supabase
+                .from('sales')
+                .select('total_amount')
+                .eq('company_id', companyId)
+                .gte('sale_date', sevenDaysAgo.toISOString())
+                .eq('is_active', true);
+
+            const totalSales = salesData?.reduce((sum, s) => sum + s.total_amount, 0) || 0;
+            const salesCount = salesData?.length || 0;
+
+            // Get categories count
+            const { data: categoriesData } = await database.supabase
+                .from('categories')
+                .select('id', { count: 'exact' })
+                .eq('company_id', companyId)
+                .eq('is_active', true);
+
+            const totalCategories = categoriesData?.length || 0;
+
+            // Get active warranties (expiring in next 30 days)
+            const thirtyDaysFromNow = new Date();
+            thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+            const { data: warrantiesData } = await database.supabase
+                .from('warranties')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .lte('expires_at', thirtyDaysFromNow.toISOString())
+                .gte('expires_at', new Date().toISOString());
+
+            const expiringSoonCount = warrantiesData?.length || 0;
+
+            // Get recent service tickets
+            const { data: servicesData } = await database.supabase
+                .from('service_history')
+                .select('status')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(10);
+
+            const pendingServices = servicesData?.filter(s => s.status === 'pending')?.length || 0;
+            const inRepairServices = servicesData?.filter(s => s.status === 'in_repair')?.length || 0;
+
+            // Get sales data for different periods
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            weekAgo.setHours(0, 0, 0, 0);
+            
+            const monthAgo = new Date();
+            monthAgo.setDate(monthAgo.getDate() - 30);
+            monthAgo.setHours(0, 0, 0, 0);
+
+            const { data: salesToday } = await database.supabase
+                .from('sales')
+                .select('total_amount')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .gte('sale_date', today.toISOString());
+
+            const { data: salesWeek } = await database.supabase
+                .from('sales')
+                .select('total_amount')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .gte('sale_date', weekAgo.toISOString());
+
+            const { data: salesMonth } = await database.supabase
+                .from('sales')
+                .select('total_amount')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .gte('sale_date', monthAgo.toISOString());
+
+            const outOfStockCount = productsData?.filter(p => p.stock === 0)?.length || 0;
+
+            // Get active warranties count
+            const { data: activeWarrantiesData } = await database.supabase
+                .from('warranties')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .gt('expires_at', new Date().toISOString());
+
+            const activeWarrantiesCount = activeWarrantiesData?.length || 0;
+
+            logger.business('dashboard_viewed', 'report', req.user.id, {
+                companyId
+            });
+
+            const dashboardMetrics = {
+                sales: {
+                    today: salesToday?.length || 0,
+                    week: salesWeek?.length || 0,
+                    month: salesMonth?.length || 0,
+                    revenue: {
+                        today: parseFloat((salesToday?.reduce((sum, s) => sum + s.total_amount, 0) || 0).toFixed(2)),
+                        week: parseFloat((salesWeek?.reduce((sum, s) => sum + s.total_amount, 0) || 0).toFixed(2)),
+                        month: parseFloat((salesMonth?.reduce((sum, s) => sum + s.total_amount, 0) || 0).toFixed(2))
+                    }
+                },
+                products: {
+                    total: totalProducts,
+                    lowStock: lowStockCount,
+                    outOfStock: outOfStockCount
+                },
+                warranties: {
+                    active: activeWarrantiesCount,
+                    expiring: expiringSoonCount
+                },
+                services: {
+                    pending: pendingServices,
+                    inRepair: inRepairServices
+                }
+            };
+
+            ResponseHandler.success(res, dashboardMetrics, 'Dashboard metrics retrieved successfully');
+
+        } catch (error) {
+            logger.error('Error getting dashboard metrics:', error);
+            ResponseHandler.handleError(res, error, 'ReportController.getDashboard');
         }
     }
 }

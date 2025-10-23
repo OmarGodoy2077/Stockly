@@ -141,42 +141,35 @@ class UserModel {
     static async updateProfile(userId, updates) {
         try {
             const allowedFields = ['name', 'phone'];
-            const fields = [];
-            const values = [];
-            let paramCount = 1;
+            const updateData = {};
 
             Object.keys(updates).forEach(key => {
                 if (allowedFields.includes(key)) {
-                    fields.push(`${key} = $${paramCount}`);
-                    values.push(updates[key]);
-                    paramCount++;
+                    updateData[key] = updates[key];
                 }
             });
 
-            if (fields.length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 throw new Error('No valid fields to update');
             }
 
-            values.push(userId);
+            updateData.updated_at = new Date().toISOString();
 
-            const query = `
-                UPDATE users
-                SET ${fields.join(', ')}, updated_at = NOW()
-                WHERE id = $${paramCount}
-                RETURNING id, email, name, phone, updated_at
-            `;
+            const { data, error } = await database.supabase
+                .from('users')
+                .update(updateData)
+                .eq('id', userId)
+                .select('id, email, name, phone, updated_at')
+                .single();
 
-            const result = await database.query(query, values);
-
-            if (result.rows.length === 0) {
-                throw new Error('User not found');
-            }
+            if (error) throw error;
+            if (!data) throw new Error('User not found');
 
             logger.business('user_updated', 'user', userId, {
                 updatedFields: Object.keys(updates)
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error updating user profile:', error);
             throw error;
@@ -192,9 +185,14 @@ class UserModel {
      */
     static async changePassword(userId, currentPassword, newPassword) {
         try {
-            // First verify current password
-            const user = await this.findById(userId);
-            if (!user) {
+            // First get user with password_hash
+            const { data: user, error: getUserError } = await database.supabase
+                .from('users')
+                .select('id, email, password_hash')
+                .eq('id', userId)
+                .single();
+
+            if (getUserError || !user) {
                 throw new Error('User not found');
             }
 
@@ -207,13 +205,15 @@ class UserModel {
             const hashedNewPassword = await bcrypt.hash(newPassword, 12);
 
             // Update password
-            const query = `
-                UPDATE users
-                SET password_hash = $1, updated_at = NOW()
-                WHERE id = $2
-            `;
+            const { error } = await database.supabase
+                .from('users')
+                .update({ 
+                    password_hash: hashedNewPassword, 
+                    updated_at: new Date().toISOString() 
+                })
+                .eq('id', userId);
 
-            await database.query(query, [hashedNewPassword, userId]);
+            if (error) throw error;
 
             logger.security('password_changed', 'medium', {
                 userId,
@@ -233,13 +233,15 @@ class UserModel {
      */
     static async deactivate(userId) {
         try {
-            const query = `
-                UPDATE users
-                SET is_active = false, updated_at = NOW()
-                WHERE id = $1
-            `;
+            const { error } = await database.supabase
+                .from('users')
+                .update({ 
+                    is_active: false, 
+                    updated_at: new Date().toISOString() 
+                })
+                .eq('id', userId);
 
-            await database.query(query, [userId]);
+            if (error) throw error;
 
             logger.business('user_deactivated', 'user', userId, {});
         } catch (error) {
@@ -255,28 +257,44 @@ class UserModel {
      */
     static async getUsersByCompany(companyId) {
         try {
-            const query = `
-                SELECT
-                    u.id,
-                    u.email,
-                    u.name,
-                    u.phone,
-                    u.is_active,
-                    u.last_login_at,
-                    u.created_at,
-                    uc.role,
-                    uc.invited_by,
-                    uc.is_active as company_member,
-                    uc.joined_at
-                FROM users u
-                INNER JOIN user_company uc ON u.id = uc.user_id
-                WHERE uc.company_id = $1
-                ORDER BY u.created_at DESC
-            `;
+            // Get user_company relationships
+            const { data: userCompanies, error } = await database.supabase
+                .from('user_company')
+                .select(`
+                    user_id,
+                    role,
+                    invited_by,
+                    is_active,
+                    joined_at,
+                    users!inner (
+                        id,
+                        email,
+                        name,
+                        phone,
+                        is_active,
+                        last_login_at,
+                        created_at
+                    )
+                `)
+                .eq('company_id', companyId)
+                .order('created_at', { ascending: false });
 
-            const result = await database.query(query, [companyId]);
+            if (error) throw error;
 
-            return result.rows;
+            // Transform to expected format
+            return (userCompanies || []).map(uc => ({
+                id: uc.users.id,
+                email: uc.users.email,
+                name: uc.users.name,
+                phone: uc.users.phone,
+                is_active: uc.users.is_active,
+                last_login_at: uc.users.last_login_at,
+                created_at: uc.users.created_at,
+                role: uc.role,
+                invited_by: uc.invited_by,
+                company_member: uc.is_active,
+                joined_at: uc.joined_at
+            }));
         } catch (error) {
             logger.error('Error getting users by company:', error);
             throw error;
@@ -349,13 +367,15 @@ class UserModel {
         try {
             const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-            const query = `
-                UPDATE users
-                SET password_hash = $1, updated_at = NOW()
-                WHERE id = $2
-            `;
+            const { error } = await database.supabase
+                .from('users')
+                .update({ 
+                    password_hash: hashedPassword, 
+                    updated_at: new Date().toISOString() 
+                })
+                .eq('id', userId);
 
-            await database.query(query, [hashedPassword, userId]);
+            if (error) throw error;
 
             logger.security('password_updated', 'medium', {
                 userId
@@ -410,14 +430,19 @@ class UserModel {
      */
     static async verifyRefreshToken(userId, refreshToken) {
         try {
-            const query = `
-                SELECT * FROM refresh_tokens
-                WHERE user_id = $1 AND token = $2 AND expires_at > NOW()
-            `;
+            const { data, error } = await database.supabase
+                .from('refresh_tokens')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('token', refreshToken)
+                .gt('expires_at', new Date().toISOString())
+                .single();
 
-            const result = await database.query(query, [userId, refreshToken]);
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
 
-            return result.rows.length > 0;
+            return !!data;
         } catch (error) {
             // If table doesn't exist, return true (rely on JWT verification only)
             logger.warn('Could not verify refresh token from database:', error.message);
@@ -433,12 +458,13 @@ class UserModel {
      */
     static async invalidateRefreshToken(userId, refreshToken) {
         try {
-            const query = `
-                DELETE FROM refresh_tokens
-                WHERE user_id = $1 AND token = $2
-            `;
+            const { error } = await database.supabase
+                .from('refresh_tokens')
+                .delete()
+                .eq('user_id', userId)
+                .eq('token', refreshToken);
 
-            await database.query(query, [userId, refreshToken]);
+            if (error) throw error;
 
             logger.auth('refresh_token_invalidated', userId, '', {});
         } catch (error) {
@@ -453,12 +479,12 @@ class UserModel {
      */
     static async invalidateAllRefreshTokens(userId) {
         try {
-            const query = `
-                DELETE FROM refresh_tokens
-                WHERE user_id = $1
-            `;
+            const { error } = await database.supabase
+                .from('refresh_tokens')
+                .delete()
+                .eq('user_id', userId);
 
-            await database.query(query, [userId]);
+            if (error) throw error;
 
             logger.auth('all_refresh_tokens_invalidated', userId, '', {});
         } catch (error) {
@@ -473,13 +499,15 @@ class UserModel {
      */
     static async activate(userId) {
         try {
-            const query = `
-                UPDATE users
-                SET is_active = true, updated_at = NOW()
-                WHERE id = $1
-            `;
+            const { error } = await database.supabase
+                .from('users')
+                .update({ 
+                    is_active: true, 
+                    updated_at: new Date().toISOString() 
+                })
+                .eq('id', userId);
 
-            await database.query(query, [userId]);
+            if (error) throw error;
 
             logger.business('user_activated', 'user', userId, {});
         } catch (error) {

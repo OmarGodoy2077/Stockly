@@ -48,15 +48,17 @@ class CompanyModel {
      */
     static async findById(companyId) {
         try {
-            const query = `
-                SELECT *
-                FROM companies
-                WHERE id = $1
-            `;
+            const { data, error } = await database.supabase
+                .from('companies')
+                .select('*')
+                .eq('id', companyId)
+                .single();
 
-            const result = await database.query(query, [companyId]);
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
 
-            return result.rows[0] || null;
+            return data || null;
         } catch (error) {
             logger.error('Error finding company by ID:', error);
             throw error;
@@ -96,42 +98,37 @@ class CompanyModel {
     static async update(companyId, updates) {
         try {
             const allowedFields = ['name', 'address', 'phone', 'email', 'website', 'logo_url'];
-            const fields = [];
-            const values = [];
-            let paramCount = 1;
+            const updateData = {};
 
             Object.keys(updates).forEach(key => {
                 if (allowedFields.includes(key)) {
-                    fields.push(`${key} = $${paramCount}`);
-                    values.push(updates[key]);
-                    paramCount++;
+                    updateData[key] = updates[key];
                 }
             });
 
-            if (fields.length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 throw new Error('No valid fields to update');
             }
 
-            values.push(companyId);
+            const { data, error } = await database.supabase
+                .from('companies')
+                .update(updateData)
+                .eq('id', companyId)
+                .select('*')
+                .single();
 
-            const query = `
-                UPDATE companies
-                SET ${fields.join(', ')}, updated_at = NOW()
-                WHERE id = $${paramCount}
-                RETURNING *
-            `;
-
-            const result = await database.query(query, values);
-
-            if (result.rows.length === 0) {
-                throw new Error('Company not found');
+            if (error) {
+                if (error.code === '23505') {
+                    throw new Error('RUC already exists');
+                }
+                throw error;
             }
 
             logger.business('company_updated', 'company', companyId, {
-                updatedFields: Object.keys(updates)
+                updatedFields: Object.keys(updateData)
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error updating company:', error);
             if (error.code === '23505') {
@@ -148,68 +145,74 @@ class CompanyModel {
      */
     static async getStatistics(companyId) {
         try {
-            const query = `
-                SELECT
-                    c.*,
-                    COALESCE(product_stats.total_products, 0) as total_products,
-                    COALESCE(product_stats.total_stock_value, 0) as total_stock_value,
-                    COALESCE(sales_stats.total_sales, 0) as total_sales,
-                    COALESCE(sales_stats.total_revenue, 0) as total_revenue,
-                    COALESCE(warranty_stats.active_warranties, 0) as active_warranties,
-                    COALESCE(service_stats.active_services, 0) as active_services,
-                    COALESCE(user_stats.total_users, 0) as total_users
-                FROM companies c
-                LEFT JOIN (
-                    SELECT
-                        company_id,
-                        COUNT(*) as total_products,
-                        SUM(stock * price) as total_stock_value
-                    FROM products
-                    WHERE is_active = true
-                    GROUP BY company_id
-                ) product_stats ON c.id = product_stats.company_id
-                LEFT JOIN (
-                    SELECT
-                        company_id,
-                        COUNT(*) as total_sales,
-                        SUM(total_amount) as total_revenue
-                    FROM sales
-                    GROUP BY company_id
-                ) sales_stats ON c.id = sales_stats.company_id
-                LEFT JOIN (
-                    SELECT
-                        company_id,
-                        COUNT(*) as active_warranties
-                    FROM warranties
-                    WHERE is_active = true AND expires_at > CURRENT_DATE
-                    GROUP BY company_id
-                ) warranty_stats ON c.id = warranty_stats.company_id
-                LEFT JOIN (
-                    SELECT
-                        company_id,
-                        COUNT(*) as active_services
-                    FROM service_histories
-                    WHERE status NOT IN ('delivered', 'cancelled')
-                    GROUP BY company_id
-                ) service_stats ON c.id = service_stats.company_id
-                LEFT JOIN (
-                    SELECT
-                        company_id,
-                        COUNT(*) as total_users
-                    FROM user_company
-                    WHERE is_active = true
-                    GROUP BY company_id
-                ) user_stats ON c.id = user_stats.company_id
-                WHERE c.id = $1
-            `;
+            // Get basic company data
+            const { data: company, error: companyError } = await database.supabase
+                .from('companies')
+                .select('*')
+                .eq('id', companyId)
+                .single();
 
-            const result = await database.query(query, [companyId]);
-
-            if (result.rows.length === 0) {
+            if (companyError) {
                 throw new Error('Company not found');
             }
 
-            return result.rows[0];
+            // Get product statistics
+            const { data: products } = await database.supabase
+                .from('products')
+                .select('id, stock, price')
+                .eq('company_id', companyId)
+                .eq('is_active', true);
+
+            const total_products = products?.length || 0;
+            const total_stock_value = (products || []).reduce((sum, p) => sum + ((p.stock || 0) * (p.price || 0)), 0);
+
+            // Get sales statistics
+            const { data: sales } = await database.supabase
+                .from('sales')
+                .select('total_amount')
+                .eq('company_id', companyId);
+
+            const total_sales = sales?.length || 0;
+            const total_revenue = (sales || []).reduce((sum, s) => sum + (s.total_amount || 0), 0);
+
+            // Get active warranties
+            const { data: warranties } = await database.supabase
+                .from('warranties')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .gt('expires_at', new Date().toISOString());
+
+            const active_warranties = warranties?.length || 0;
+
+            // Get active services
+            const { data: services } = await database.supabase
+                .from('service_histories')
+                .select('id')
+                .eq('company_id', companyId)
+                .not('status', 'in', '("delivered","cancelled")');
+
+            const active_services = services?.length || 0;
+
+            // Get total users
+            const { data: userCompanies } = await database.supabase
+                .from('user_company')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('is_active', true);
+
+            const total_users = userCompanies?.length || 0;
+
+            return {
+                ...company,
+                total_products,
+                total_stock_value,
+                total_sales,
+                total_revenue,
+                active_warranties,
+                active_services,
+                total_users
+            };
         } catch (error) {
             logger.error('Error getting company statistics:', error);
             throw error;
@@ -223,21 +226,27 @@ class CompanyModel {
      */
     static async getByUserId(userId) {
         try {
-            const query = `
-                SELECT
-                    c.*,
-                    uc.role,
-                    uc.is_active as member_active,
-                    uc.joined_at
-                FROM companies c
-                INNER JOIN user_company uc ON c.id = uc.company_id
-                WHERE uc.user_id = $1 AND uc.is_active = true
-                ORDER BY uc.joined_at DESC
-            `;
+            const { data, error } = await database.supabase
+                .from('user_company')
+                .select(`
+                    *,
+                    companies(*)
+                `)
+                .eq('user_id', userId)
+                .eq('is_active', true)
+                .order('joined_at', { ascending: false });
 
-            const result = await database.query(query, [userId]);
+            if (error) {
+                throw error;
+            }
 
-            return result.rows;
+            // Flatten the response to match expected format
+            return (data || []).map(uc => ({
+                ...uc.companies,
+                role: uc.role,
+                member_active: uc.is_active,
+                joined_at: uc.joined_at
+            }));
         } catch (error) {
             logger.error('Error getting companies by user ID:', error);
             throw error;
@@ -297,15 +306,17 @@ class CompanyModel {
      */
     static async removeUser(companyId, userId) {
         try {
-            const query = `
-                UPDATE user_company
-                SET is_active = false
-                WHERE company_id = $1 AND user_id = $2
-            `;
+            const { error, status } = await database.supabase
+                .from('user_company')
+                .update({ is_active: false })
+                .eq('company_id', companyId)
+                .eq('user_id', userId);
 
-            const result = await database.query(query, [companyId, userId]);
+            if (error) {
+                throw error;
+            }
 
-            if (result.rowCount === 0) {
+            if (status === 204) {
                 throw new Error('User is not a member of this company');
             }
 
@@ -329,26 +340,25 @@ class CompanyModel {
      */
     static async updateUserRole(companyId, userId, newRole) {
         try {
-            const query = `
-                UPDATE user_company
-                SET role = $1, updated_at = NOW()
-                WHERE company_id = $2 AND user_id = $3 AND is_active = true
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('user_company')
+                .update({ role: newRole })
+                .eq('company_id', companyId)
+                .eq('user_id', userId)
+                .eq('is_active', true)
+                .select('*')
+                .single();
 
-            const result = await database.query(query, [newRole, companyId, userId]);
-
-            if (result.rows.length === 0) {
-                throw new Error('User is not an active member of this company');
+            if (error) {
+                throw error;
             }
 
             logger.business('user_role_updated', 'company', companyId, {
                 userId,
-                oldRole: result.rows[0].role,
                 newRole
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error updating user role:', error);
             throw error;
@@ -356,36 +366,89 @@ class CompanyModel {
     }
 
     /**
+     * Get company members
+     * @param {string} companyId - Company ID
+     * @returns {Promise<Array>} List of company members
+     */    /**
      * Get company members with their details
      * @param {string} companyId - Company ID
      * @returns {Promise<Array>} Company members
      */
     static async getMembers(companyId) {
         try {
-            const query = `
-                SELECT
-                    u.id,
-                    u.email,
-                    u.name,
-                    u.phone,
-                    u.is_active,
-                    u.last_login_at,
-                    u.created_at as user_created_at,
-                    uc.role,
-                    uc.is_active as member_active,
-                    uc.joined_at,
-                    uc.invited_by,
-                    inviter.name as invited_by_name
-                FROM user_company uc
-                INNER JOIN users u ON uc.user_id = u.id
-                LEFT JOIN users inviter ON uc.invited_by = inviter.id
-                WHERE uc.company_id = $1
-                ORDER BY uc.joined_at DESC
-            `;
+            // First get user_company relationships
+            const { data: userCompanyData, error: ucError } = await database.supabase
+                .from('user_company')
+                .select(`
+                    user_id,
+                    role,
+                    is_active,
+                    joined_at,
+                    invited_by,
+                    invitation_code_used
+                `)
+                .eq('company_id', companyId);
 
-            const result = await database.query(query, [companyId]);
+            if (ucError) {
+                logger.error('Supabase error getting user_company:', ucError);
+                throw ucError;
+            }
 
-            return result.rows;
+            if (!userCompanyData || userCompanyData.length === 0) {
+                return [];
+            }
+
+            // Get user details for each user
+            const userIds = userCompanyData.map(uc => uc.user_id);
+            const { data: usersData, error: usersError } = await database.supabase
+                .from('users')
+                .select('id, email, name, phone, is_active, last_login_at, created_at')
+                .in('id', userIds);
+
+            if (usersError) {
+                logger.error('Supabase error getting users:', usersError);
+                throw usersError;
+            }
+
+            // Get invited by names
+            const invitedByIds = userCompanyData
+                .map(uc => uc.invited_by)
+                .filter(id => id);
+
+            let invitersData = [];
+            if (invitedByIds.length > 0) {
+                const { data: inviters, error: invitersError } = await database.supabase
+                    .from('users')
+                    .select('id, name')
+                    .in('id', invitedByIds);
+
+                if (!invitersError) {
+                    invitersData = inviters || [];
+                }
+            }
+
+            // Combine the data
+            const invitersMap = new Map(invitersData.map(inv => [inv.id, inv.name]));
+
+            return userCompanyData.map(uc => {
+                const user = usersData.find(u => u.id === uc.user_id);
+                if (!user) return null;
+
+                return {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    phone: user.phone,
+                    is_active: user.is_active,
+                    last_login_at: user.last_login_at,
+                    user_created_at: user.created_at,
+                    role: uc.role,
+                    member_active: uc.is_active,
+                    joined_at: uc.joined_at,
+                    invited_by: uc.invited_by,
+                    invited_by_name: invitersMap.get(uc.invited_by) || null
+                };
+            }).filter(Boolean);
         } catch (error) {
             logger.error('Error getting company members:', error);
             throw error;
@@ -399,13 +462,17 @@ class CompanyModel {
      */
     static async deactivate(companyId) {
         try {
-            const query = `
-                UPDATE companies
-                SET is_active = false, updated_at = NOW()
-                WHERE id = $1
-            `;
+            const { error } = await database.supabase
+                .from('companies')
+                .update({ 
+                    is_active: false,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', companyId);
 
-            await database.query(query, [companyId]);
+            if (error) {
+                throw error;
+            }
 
             logger.business('company_deactivated', 'company', companyId, {});
         } catch (error) {

@@ -24,30 +24,33 @@ class WarrantyModel {
         expiresAt
     }) {
         try {
-            const query = `
-                INSERT INTO warranties (
-                    sale_id, company_id, serial_number, product_name,
-                    customer_name, customer_email, customer_phone,
-                    warranty_months, start_date, expires_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('warranties')
+                .insert([{
+                    sale_id: saleId,
+                    company_id: companyId,
+                    serial_number: serialNumber,
+                    product_name: productName,
+                    customer_name: customerName,
+                    customer_email: customerEmail,
+                    customer_phone: customerPhone,
+                    warranty_months: warrantyMonths,
+                    start_date: startDate,
+                    expires_at: expiresAt
+                }])
+                .select()
+                .single();
 
-            const result = await database.query(query, [
-                saleId, companyId, serialNumber, productName,
-                customerName, customerEmail, customerPhone,
-                warrantyMonths, startDate, expiresAt
-            ]);
+            if (error) throw error;
 
-            logger.business('warranty_created', 'warranty', result.rows[0].id, {
+            logger.business('warranty_created', 'warranty', data.id, {
                 companyId,
                 saleId,
                 serialNumber,
                 expiresAt
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error creating warranty:', error);
             throw error;
@@ -62,30 +65,34 @@ class WarrantyModel {
      */
     static async findById(warrantyId, companyId) {
         try {
-            const query = `
-                SELECT
-                    w.*,
-                    s.id as sale_id,
-                    s.total_amount as sale_total,
-                    s.sale_date,
-                    EXTRACT(DAYS FROM (w.expires_at - CURRENT_DATE)) as days_remaining,
-                    CASE
-                        WHEN w.expires_at < CURRENT_DATE THEN 'expired'
-                        WHEN w.expires_at <= CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
-                        ELSE 'active'
-                    END as warranty_status
-                FROM warranties w
-                LEFT JOIN sales s ON w.sale_id = s.id
-                WHERE w.id = $1 AND w.company_id = $2
-            `;
+            const { data: warranty, error } = await database.supabase
+                .from('warranties')
+                .select('*, sales(*)')
+                .eq('id', warrantyId)
+                .eq('company_id', companyId)
+                .single();
 
-            const result = await database.query(query, [warrantyId, companyId]);
+            if (error || !warranty) return null;
 
-            if (result.rows.length === 0) {
-                return null;
+            // Calculate days remaining and status
+            const expiresAt = new Date(warranty.expires_at);
+            const now = new Date();
+            const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+
+            let warrantyStatus = 'active';
+            if (expiresAt < now) {
+                warrantyStatus = 'expired';
+            } else if (daysRemaining <= 30) {
+                warrantyStatus = 'expiring_soon';
             }
 
-            return result.rows[0];
+            return {
+                ...warranty,
+                sale_total: warranty.sales?.total_amount,
+                sale_date: warranty.sales?.sale_date,
+                days_remaining: daysRemaining,
+                warranty_status: warrantyStatus
+            };
         } catch (error) {
             logger.error('Error finding warranty by ID:', error);
             throw error;
@@ -109,86 +116,84 @@ class WarrantyModel {
     }) {
         try {
             const offset = (page - 1) * limit;
-            const params = [companyId];
-            let paramCount = 1;
+            const now = new Date().toISOString();
+            const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-            // Build WHERE clause
-            let whereConditions = ['w.company_id = $1'];
+            // Build base query
+            let query = database.supabase
+                .from('warranties')
+                .select('*, sales(*)', { count: 'exact' })
+                .eq('company_id', companyId);
 
+            // Apply status filter
             if (status === 'active') {
-                whereConditions.push('w.expires_at >= CURRENT_DATE');
-                whereConditions.push('w.is_active = true');
+                query = query.gte('expires_at', now).eq('is_active', true);
             } else if (status === 'expired') {
-                whereConditions.push('w.expires_at < CURRENT_DATE');
+                query = query.lt('expires_at', now);
             } else if (status === 'expiring_soon') {
-                whereConditions.push('w.expires_at >= CURRENT_DATE');
-                whereConditions.push('w.expires_at <= CURRENT_DATE + INTERVAL \'30 days\'');
-                whereConditions.push('w.is_active = true');
+                query = query.gte('expires_at', now)
+                    .lte('expires_at', thirtyDaysLater)
+                    .eq('is_active', true);
             }
 
+            // Apply search filters
             if (serialNumber) {
-                paramCount++;
-                whereConditions.push(`w.serial_number ILIKE $${paramCount}`);
-                params.push(`%${serialNumber}%`);
+                query = query.ilike('serial_number', `%${serialNumber}%`);
             }
 
             if (customerName) {
-                paramCount++;
-                whereConditions.push(`w.customer_name ILIKE $${paramCount}`);
-                params.push(`%${customerName}%`);
+                query = query.ilike('customer_name', `%${customerName}%`);
             }
 
-            const whereClause = whereConditions.join(' AND ');
+            // Apply sorting
+            const validSortFields = ['expires_at', 'start_date', 'customer_name', 'created_at'];
+            const sortField = validSortFields.includes(sortBy) ? sortBy : 'expires_at';
+            const ascending = sortOrder.toUpperCase() !== 'DESC';
+            
+            query = query.order(sortField, { ascending });
 
-            // Validate sort fields
-            const validSortFields = {
-                'expires_at': 'w.expires_at',
-                'start_date': 'w.start_date',
-                'customer_name': 'w.customer_name',
-                'created_at': 'w.created_at'
-            };
-            const sortField = validSortFields[sortBy] || 'w.expires_at';
-            const order = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+            // Apply pagination
+            query = query.range(offset, offset + limit - 1);
 
-            // Main query
-            const query = `
-                SELECT
-                    w.*,
-                    s.total_amount as sale_total,
-                    s.sale_date,
-                    EXTRACT(DAYS FROM (w.expires_at - CURRENT_DATE)) as days_remaining,
-                    CASE
-                        WHEN w.expires_at < CURRENT_DATE THEN 'expired'
-                        WHEN w.expires_at <= CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
-                        ELSE 'active'
-                    END as warranty_status,
-                    (SELECT COUNT(*) FROM service_histories sh WHERE sh.warranty_id = w.id) as service_count
-                FROM warranties w
-                LEFT JOIN sales s ON w.sale_id = s.id
-                WHERE ${whereClause}
-                ORDER BY ${sortField} ${order}
-                LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
-            `;
+            const { data: warranties, error, count } = await query;
 
-            // Count query
-            const countQuery = `
-                SELECT COUNT(*) as total
-                FROM warranties w
-                WHERE ${whereClause}
-            `;
+            if (error) throw error;
 
-            params.push(limit, offset);
+            // Get service counts for each warranty
+            const warrantiesWithStats = await Promise.all(
+                (warranties || []).map(async (warranty) => {
+                    const { count: serviceCount } = await database.supabase
+                        .from('service_histories')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('warranty_id', warranty.id);
 
-            const [warranties, countResult] = await Promise.all([
-                database.query(query, params),
-                database.query(countQuery, params.slice(0, paramCount))
-            ]);
+                    const expiresAt = new Date(warranty.expires_at);
+                    const nowDate = new Date();
+                    const daysRemaining = Math.ceil((expiresAt - nowDate) / (1000 * 60 * 60 * 24));
 
-            const total = parseInt(countResult.rows[0].total);
+                    let warrantyStatus = 'active';
+                    if (expiresAt < nowDate) {
+                        warrantyStatus = 'expired';
+                    } else if (daysRemaining <= 30) {
+                        warrantyStatus = 'expiring_soon';
+                    }
+
+                    return {
+                        ...warranty,
+                        sale_total: warranty.sales?.total_amount,
+                        sale_date: warranty.sales?.sale_date,
+                        days_remaining: daysRemaining,
+                        warranty_status: warrantyStatus,
+                        service_count: serviceCount || 0
+                    };
+                })
+            );
+
+            const total = count || 0;
             const totalPages = Math.ceil(total / limit);
 
             return {
-                warranties: warranties.rows,
+                warranties: warrantiesWithStats,
                 pagination: {
                     page,
                     limit,
@@ -212,31 +217,37 @@ class WarrantyModel {
      */
     static async findBySerialNumber(companyId, serialNumber) {
         try {
-            const query = `
-                SELECT
-                    w.*,
-                    s.total_amount as sale_total,
-                    s.sale_date,
-                    EXTRACT(DAYS FROM (w.expires_at - CURRENT_DATE)) as days_remaining,
-                    CASE
-                        WHEN w.expires_at < CURRENT_DATE THEN 'expired'
-                        WHEN w.expires_at <= CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
-                        ELSE 'active'
-                    END as warranty_status
-                FROM warranties w
-                LEFT JOIN sales s ON w.sale_id = s.id
-                WHERE w.company_id = $1 AND w.serial_number = $2
-                ORDER BY w.created_at DESC
-                LIMIT 1
-            `;
+            const { data: warranties, error } = await database.supabase
+                .from('warranties')
+                .select('*, sales(*)')
+                .eq('company_id', companyId)
+                .eq('serial_number', serialNumber)
+                .order('created_at', { ascending: false })
+                .limit(1);
 
-            const result = await database.query(query, [companyId, serialNumber]);
+            if (error || !warranties || warranties.length === 0) return null;
 
-            if (result.rows.length === 0) {
-                return null;
+            const warranty = warranties[0];
+            
+            // Calculate days remaining and status
+            const expiresAt = new Date(warranty.expires_at);
+            const now = new Date();
+            const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+
+            let warrantyStatus = 'active';
+            if (expiresAt < now) {
+                warrantyStatus = 'expired';
+            } else if (daysRemaining <= 30) {
+                warrantyStatus = 'expiring_soon';
             }
 
-            return result.rows[0];
+            return {
+                ...warranty,
+                sale_total: warranty.sales?.total_amount,
+                sale_date: warranty.sales?.sale_date,
+                days_remaining: daysRemaining,
+                warranty_status: warrantyStatus
+            };
         } catch (error) {
             logger.error('Error finding warranty by serial number:', error);
             throw error;
@@ -257,43 +268,34 @@ class WarrantyModel {
                 'is_active', 'warranty_months', 'expires_at'
             ];
 
-            const fields = [];
-            const values = [];
-            let paramCount = 1;
-
+            const updateData = {};
             Object.keys(updates).forEach(key => {
                 if (allowedFields.includes(key)) {
-                    fields.push(`${key} = $${paramCount}`);
-                    values.push(updates[key]);
-                    paramCount++;
+                    updateData[key] = updates[key];
                 }
             });
 
-            if (fields.length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 throw new Error('No valid fields to update');
             }
 
-            values.push(warrantyId, companyId);
+            const { data, error } = await database.supabase
+                .from('warranties')
+                .update(updateData)
+                .eq('id', warrantyId)
+                .eq('company_id', companyId)
+                .select()
+                .single();
 
-            const query = `
-                UPDATE warranties
-                SET ${fields.join(', ')}
-                WHERE id = $${paramCount} AND company_id = $${paramCount + 1}
-                RETURNING *
-            `;
-
-            const result = await database.query(query, values);
-
-            if (result.rowCount === 0) {
-                throw new Error('Warranty not found');
-            }
+            if (error) throw error;
+            if (!data) throw new Error('Warranty not found');
 
             logger.business('warranty_updated', 'warranty', warrantyId, {
                 companyId,
                 updates
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error updating warranty:', error);
             throw error;
@@ -308,17 +310,13 @@ class WarrantyModel {
      */
     static async deactivate(warrantyId, companyId) {
         try {
-            const query = `
-                UPDATE warranties
-                SET is_active = false
-                WHERE id = $1 AND company_id = $2
-            `;
+            const { error } = await database.supabase
+                .from('warranties')
+                .update({ is_active: false })
+                .eq('id', warrantyId)
+                .eq('company_id', companyId);
 
-            const result = await database.query(query, [warrantyId, companyId]);
-
-            if (result.rowCount === 0) {
-                throw new Error('Warranty not found');
-            }
+            if (error) throw error;
 
             logger.business('warranty_deactivated', 'warranty', warrantyId, {
                 companyId
@@ -339,20 +337,30 @@ class WarrantyModel {
      */
     static async getExpiring(companyId, daysThreshold = 30) {
         try {
-            const query = `
-                SELECT
-                    w.*,
-                    EXTRACT(DAYS FROM (w.expires_at - CURRENT_DATE)) as days_remaining
-                FROM warranties w
-                WHERE w.company_id = $1
-                  AND w.is_active = true
-                  AND w.expires_at >= CURRENT_DATE
-                  AND w.expires_at <= CURRENT_DATE + INTERVAL '${daysThreshold} days'
-                ORDER BY w.expires_at ASC
-            `;
+            const now = new Date().toISOString();
+            const threshold = new Date(Date.now() + daysThreshold * 24 * 60 * 60 * 1000).toISOString();
 
-            const result = await database.query(query, [companyId]);
-            return result.rows;
+            const { data, error } = await database.supabase
+                .from('warranties')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .gte('expires_at', now)
+                .lte('expires_at', threshold)
+                .order('expires_at', { ascending: true });
+
+            if (error) throw error;
+
+            return (data || []).map(warranty => {
+                const expiresAt = new Date(warranty.expires_at);
+                const nowDate = new Date();
+                const daysRemaining = Math.ceil((expiresAt - nowDate) / (1000 * 60 * 60 * 24));
+                
+                return {
+                    ...warranty,
+                    days_remaining: daysRemaining
+                };
+            });
         } catch (error) {
             logger.error('Error getting expiring warranties:', error);
             throw error;
@@ -366,18 +374,36 @@ class WarrantyModel {
      */
     static async getStatistics(companyId) {
         try {
-            const query = `
-                SELECT
-                    COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE expires_at >= CURRENT_DATE AND is_active = true) as active,
-                    COUNT(*) FILTER (WHERE expires_at < CURRENT_DATE) as expired,
-                    COUNT(*) FILTER (WHERE expires_at >= CURRENT_DATE AND expires_at <= CURRENT_DATE + INTERVAL '30 days' AND is_active = true) as expiring_soon
-                FROM warranties
-                WHERE company_id = $1
-            `;
+            const now = new Date().toISOString();
+            const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-            const result = await database.query(query, [companyId]);
-            return result.rows[0];
+            // Get all warranties for the company
+            const { data: warranties, error } = await database.supabase
+                .from('warranties')
+                .select('*')
+                .eq('company_id', companyId);
+
+            if (error) throw error;
+
+            const total = warranties ? warranties.length : 0;
+            const active = warranties ? warranties.filter(w => 
+                new Date(w.expires_at) >= new Date() && w.is_active
+            ).length : 0;
+            const expired = warranties ? warranties.filter(w => 
+                new Date(w.expires_at) < new Date()
+            ).length : 0;
+            const expiringSoon = warranties ? warranties.filter(w => 
+                new Date(w.expires_at) >= new Date() &&
+                new Date(w.expires_at) <= new Date(thirtyDaysLater) &&
+                w.is_active
+            ).length : 0;
+
+            return {
+                total,
+                active,
+                expired,
+                expiring_soon: expiringSoon
+            };
         } catch (error) {
             logger.error('Error getting warranty statistics:', error);
             throw error;

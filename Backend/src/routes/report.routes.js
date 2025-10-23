@@ -25,6 +25,20 @@ router.get('/types', ReportController.getReportTypes);
 
 /**
  * @swagger
+ * /api/v1/reports/dashboard:
+ *   get:
+ *     summary: Get dashboard metrics and summary
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard metrics retrieved successfully
+ */
+router.get('/dashboard', ReportController.getDashboard);
+
+/**
+ * @swagger
  * /api/v1/reports/inventory:
  *   get:
  *     summary: Generate inventory report

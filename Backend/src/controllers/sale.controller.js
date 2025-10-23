@@ -30,8 +30,8 @@ class SaleController {
 
             const filters = {
                 companyId: req.companyId,
-                startDate,
-                endDate,
+                startDate: start_date,
+                endDate: end_date,
                 customerName: customer_name,
                 serialNumber: serial_number,
                 paymentMethod: payment_method,
@@ -94,15 +94,20 @@ class SaleController {
                 customer_email,
                 customer_phone,
                 customer_address,
+                items,
                 products,
                 payment_method,
+                sales_platform = 'direct',
                 notes,
                 warranty_months = 12,
                 serial_image // Base64 image for OCR
             } = req.body;
 
+            // Support both 'items' and 'products' field names for backward compatibility
+            const productsArray = items || products;
+
             // Validate required fields
-            if (!customer_name || !products || !Array.isArray(products) || products.length === 0) {
+            if (!customer_name || !productsArray || !Array.isArray(productsArray) || productsArray.length === 0) {
                 return ResponseHandler.error(res, 'Customer name and products are required', 400);
             }
 
@@ -110,7 +115,7 @@ class SaleController {
             let subtotal = 0;
             const processedProducts = [];
 
-            for (const product of products) {
+            for (const product of productsArray) {
                 if (!product.product_id || !product.quantity || !product.unit_price) {
                     return ResponseHandler.error(res, 'Invalid product data', 400);
                 }
@@ -203,6 +208,7 @@ class SaleController {
                 serialImageUrl,
                 warrantyMonths: warranty_months,
                 paymentMethod: payment_method,
+                salesPlatform: sales_platform,
                 notes
             };
 

@@ -39,6 +39,15 @@ export const authenticateJWT = async (req, res, next) => {
         // Verify token
         const decoded = jwtConfig.verifyAccessToken(token);
 
+        // Log menos verboso - solo en modo desarrollo
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[AUTH] Token decoded:', {
+                user_id: decoded.user_id,
+                company_id: decoded.company_id,
+                role: decoded.role
+            });
+        }
+
         // Get user data
         const user = await UserModel.findById(decoded.user_id);
 
@@ -73,8 +82,19 @@ export const authenticateJWT = async (req, res, next) => {
             email: user.email,
             name: user.name,
             phone: user.phone,
-            isActive: user.is_active
+            isActive: user.is_active,
+            companyId: decoded.company_id,  // ← Asegurar que se establece correctamente
+            role: decoded.role
         };
+
+        // Log menos verboso - solo en modo desarrollo
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[AUTH] User set:', {
+                userId: req.user.id,
+                companyId: req.user.companyId,
+                role: req.user.role
+            });
+        }
 
         req.token = {
             accessToken: token,
@@ -149,7 +169,9 @@ export const optionalAuth = async (req, res, next) => {
                 email: user.email,
                 name: user.name,
                 phone: user.phone,
-                isActive: user.is_active
+                isActive: user.is_active,
+                companyId: decoded.company_id,
+                role: decoded.role
             };
 
             req.token = {

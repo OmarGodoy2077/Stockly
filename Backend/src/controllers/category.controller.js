@@ -33,22 +33,33 @@ class CategoryController {
      */
     static async getTree(req, res) {
         try {
-            const categories = await CategoryModel.getByCompany(req.companyId);
+            const companyId = req.companyId;
+            logger.debug('getTree called', {
+                companyId,
+                userId: req.user?.id,
+                userRole: req.user?.role
+            });
+
+            const categories = await CategoryModel.getByCompany(companyId);
             
+            logger.debug('Categories retrieved:', {
+                count: categories.length,
+                companyId
+            });
+
             // Build tree structure
-            const tree = this.buildCategoryTree(categories);
+            const tree = CategoryController.buildCategoryTree(categories);
 
             logger.business('category_tree_viewed', 'category', req.user.id, {
-                companyId: req.companyId,
+                companyId,
                 count: categories.length
             });
 
-            ResponseHandler.success(res, {
-                tree,
-                total: categories.length
-            }, 'Category tree retrieved successfully');
+            // Return only the tree array, not an object with tree and total
+            ResponseHandler.success(res, tree, 'Category tree retrieved successfully');
 
         } catch (error) {
+            logger.error('Error in getTree:', error);
             ResponseHandler.handleError(res, error, 'CategoryController.getTree');
         }
     }
@@ -71,8 +82,8 @@ class CategoryController {
 
         // Build tree relationships
         categories.forEach(cat => {
-            if (cat.parent_id) {
-                const parent = categoryMap.get(cat.parent_id);
+            if (cat.parentId) {
+                const parent = categoryMap.get(cat.parentId);
                 if (parent) {
                     parent.children.push(categoryMap.get(cat.id));
                 }
@@ -138,10 +149,11 @@ class CategoryController {
                 parentId: parent_id
             });
 
-            ResponseHandler.created(
+            ResponseHandler.success(
                 res,
                 category,
-                'Category created successfully'
+                'Category created successfully',
+                201
             );
 
         } catch (error) {

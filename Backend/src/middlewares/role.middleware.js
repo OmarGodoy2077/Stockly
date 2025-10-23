@@ -166,21 +166,58 @@ export const setCompanyContext = async (req, res, next) => {
         // 2. Request body (req.body.companyId)
         // 3. User's token (req.user.companyId)
 
-        let companyId = req.params.companyId || req.body.companyId;
+        let companyId = req.params.companyId || req.body?.companyId;
 
         if (!companyId && req.user?.companyId) {
             companyId = req.user.companyId;
         }
 
+        // Log menos verboso - solo en modo desarrollo
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[COMPANY_CTX]', req.url, '- companyId:', companyId);
+        }
+
+        logger.debug('setCompanyContext debug:', {
+            url: req.url,
+            method: req.method,
+            paramsCompanyId: req.params.companyId,
+            bodyCompanyId: req.body?.companyId,
+            userCompanyId: req.user?.companyId,
+            finalCompanyId: companyId,
+            requestUser: req.user
+        });
+
         if (!companyId) {
+            console.error('[COMPANY_CTX] MISSING companyId:', {
+                url: req.url,
+                hasUser: !!req.user,
+                userCompanyId: req.user?.companyId,
+                tokenCompanyId: req.token?.decoded?.company_id
+            });
+            logger.error('Company ID missing in setCompanyContext:', {
+                url: req.url,
+                user: req.user,
+                params: req.params,
+                body: req.body
+            });
             return res.status(400).json({
-                error: 'Company ID is required'
+                error: 'Company ID is required. Make sure you are logged in and have selected a company.',
+                debug: {
+                    hasUserCompanyId: !!req.user?.companyId,
+                    hasParamsCompanyId: !!req.params.companyId,
+                    hasBodyCompanyId: !!req.body?.companyId,
+                    userCompanyIdValue: req.user?.companyId
+                }
             });
         }
 
-        // Validate UUID format
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        // Validate UUID format (more permissive)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(companyId)) {
+            logger.error('Invalid company ID format:', {
+                companyId,
+                url: req.url
+            });
             return res.status(400).json({
                 error: 'Invalid company ID format'
             });
@@ -190,7 +227,7 @@ export const setCompanyContext = async (req, res, next) => {
         req.companyId = companyId;
         req.userRole = req.user?.role || null;
 
-        logger.debug('Company context set:', {
+        logger.debug('Company context set successfully:', {
             companyId,
             userId: req.user?.id,
             userRole: req.userRole
@@ -231,6 +268,12 @@ export const checkResourcePermission = (resourceType, permission = 'read') => {
                     seller: ['create', 'read', 'update'],
                     inventory: ['read', 'update'] // Can update stock but not delete
                 },
+                category: {
+                    owner: ['create', 'read', 'update', 'delete'],
+                    admin: ['create', 'read', 'update', 'delete'],
+                    seller: ['read'],
+                    inventory: ['read']
+                },
                 sale: {
                     owner: ['create', 'read', 'update', 'delete'],
                     admin: ['create', 'read', 'update', 'delete'],
@@ -248,6 +291,30 @@ export const checkResourcePermission = (resourceType, permission = 'read') => {
                     admin: ['create', 'read', 'update', 'delete'],
                     seller: ['read'],
                     inventory: ['read']
+                },
+                invoice: {
+                    owner: ['create', 'read', 'update', 'delete'],
+                    admin: ['create', 'read', 'update', 'delete'],
+                    seller: ['create', 'read', 'update'],
+                    inventory: ['read']
+                },
+                warranty: {
+                    owner: ['create', 'read', 'update', 'delete'],
+                    admin: ['create', 'read', 'update', 'delete'],
+                    seller: ['read', 'update'],
+                    inventory: ['create', 'read', 'update']
+                },
+                supplier: {
+                    owner: ['create', 'read', 'update', 'delete'],
+                    admin: ['create', 'read', 'update', 'delete'],
+                    seller: ['read'],
+                    inventory: ['read']
+                },
+                service: {
+                    owner: ['create', 'read', 'update', 'delete'],
+                    admin: ['create', 'read', 'update', 'delete'],
+                    seller: ['create', 'read', 'update'],
+                    inventory: ['read']
                 }
             };
 
@@ -264,12 +331,28 @@ export const checkResourcePermission = (resourceType, permission = 'read') => {
                 });
             }
 
-            const allowedPermissions = resourcePermissions[userRole] || [];
+            const allowedPermissions = resourcePermissions[userRole];
+            
+            // If role not found in permissions matrix, deny access
+            if (!allowedPermissions) {
+                logger.security('role_not_found_in_permissions', 'high', {
+                    userRole,
+                    resourceType,
+                    userId: req.user.id,
+                    companyId: req.companyId
+                });
+
+                return res.status(403).json({
+                    error: 'Your role is not recognized in the permission system',
+                    role: userRole,
+                    resource: resourceType
+                });
+            }
 
             if (!allowedPermissions.includes(permission)) {
                 logger.security('resource_permission_denied', 'medium', {
                     resourceType,
-                    resourceId,
+                    resourceId: req.params.id || req.params.productId || req.body.id,
                     permission,
                     userRole,
                     userId: req.user.id,

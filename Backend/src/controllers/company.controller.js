@@ -228,12 +228,17 @@ class CompanyController {
         try {
             const { companyId } = req.params;
 
+            logger.debug('Getting members for company:', { companyId, userId: req.user?.id });
+
             const members = await CompanyModel.getMembers(companyId);
+
+            logger.debug('Members retrieved:', { count: members.length });
 
             res.json({
                 success: true,
                 data: {
                     members: members.map(m => ({
+                        userId: m.id,  // Use userId for consistency with Frontend
                         id: m.id,
                         email: m.email,
                         name: m.name,

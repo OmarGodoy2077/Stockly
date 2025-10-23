@@ -199,21 +199,29 @@ class Logger {
 
     /**
      * Log HTTP request (for middleware)
-     * @param {string} method - HTTP method
-     * @param {string} url - Request URL
-     * @param {number} statusCode - Response status code
-     * @param {number} duration - Request duration in ms
-     * @param {string} ip - Client IP address
+     * Can be called in two ways:
+     * 1. http(method, url, statusCode, duration, ip) - legacy
+     * 2. http(message, meta) - new format
      */
-    http(method, url, statusCode, duration, ip) {
-        this.logger.http(`${method} ${url} ${statusCode} ${duration}ms`, {
-            method,
-            url,
-            statusCode,
-            duration,
-            ip,
-            category: 'http'
-        });
+    http(methodOrMessage, urlOrMeta, statusCode, duration, ip) {
+        // Check if called with new format (string message + object metadata)
+        if (typeof methodOrMessage === 'string' && typeof urlOrMeta === 'object' && !Array.isArray(urlOrMeta)) {
+            // New format: http(message, metadata)
+            this.logger.http(methodOrMessage, {
+                category: 'http',
+                ...urlOrMeta
+            });
+        } else {
+            // Legacy format: http(method, url, statusCode, duration, ip)
+            this.logger.http(`${methodOrMessage} ${urlOrMeta} ${statusCode} ${duration}ms`, {
+                method: methodOrMessage,
+                url: urlOrMeta,
+                statusCode,
+                duration,
+                ip,
+                category: 'http'
+            });
+        }
     }
 
     /**

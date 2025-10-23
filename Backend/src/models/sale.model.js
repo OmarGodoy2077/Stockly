@@ -1,17 +1,9 @@
-import { database } from '../config/database.js';
+﻿import { database } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import DateUtils from '../utils/dateUtils.js';
 
-/**
- * Sale model - Handles sales-related database operations
- */
 class SaleModel {
 
-    /**
-     * Create a new sale
-     * @param {Object} saleData - Sale data
-     * @returns {Promise<Object>} Created sale
-     */
     static async create({
         companyId,
         userId,
@@ -28,89 +20,77 @@ class SaleModel {
         serialImageUrl,
         warrantyMonths,
         paymentMethod,
+        salesPlatform = 'direct',
         notes,
         saleDate
     }) {
         try {
-            const query = `
-                INSERT INTO sales (
-                    company_id, user_id, customer_name, customer_email, customer_phone,
-                    customer_address, products, subtotal, tax_amount, discount_amount,
-                    total_amount, serial_number, serial_image_url, warranty_months,
-                    payment_method, sale_date, notes
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('sales')
+                .insert([{
+                    company_id: companyId,
+                    user_id: userId,
+                    customer_name: customerName,
+                    customer_email: customerEmail,
+                    customer_phone: customerPhone,
+                    customer_address: customerAddress,
+                    products: products,
+                    subtotal: subtotal,
+                    tax_amount: taxAmount,
+                    discount_amount: discountAmount,
+                    total_amount: totalAmount,
+                    serial_number: serialNumber,
+                    serial_image_url: serialImageUrl,
+                    warranty_months: warrantyMonths,
+                    payment_method: paymentMethod,
+                    sales_platform: salesPlatform,
+                    sale_date: saleDate || DateUtils.getCurrentDateGuatemala(),
+                    notes: notes
+                }])
+                .select()
+                .single();
 
-            const result = await database.query(query, [
-                companyId, userId, customerName, customerEmail, customerPhone,
-                customerAddress, JSON.stringify(products), subtotal, taxAmount, discountAmount,
-                totalAmount, serialNumber, serialImageUrl, warrantyMonths,
-                paymentMethod, saleDate || DateUtils.getCurrentDateGuatemala(), notes
-            ]);
+            if (error) throw error;
 
-            logger.business('sale_created', 'sale', result.rows[0].id, {
+            logger.business('sale_created', 'sale', data.id, {
                 companyId,
                 userId,
                 customerName,
                 totalAmount,
-                serialNumber
+                serialNumber,
+                salesPlatform
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error creating sale:', error);
             throw error;
         }
     }
 
-    /**
-     * Find sale by ID
-     * @param {string} saleId - Sale ID
-     * @param {string} companyId - Company ID (for security)
-     * @returns {Promise<Object|null>} Sale data or null
-     */
     static async findById(saleId, companyId) {
         try {
-            const query = `
-                SELECT
-                    s.*,
-                    u.name as seller_name,
-                    u.email as seller_email,
-                    p.name as product_name,
-                    p.sku as product_sku
-                FROM sales s
-                LEFT JOIN users u ON s.user_id = u.id
-                LEFT JOIN products p ON (s.products->0->>'product_id')::uuid = p.id
-                WHERE s.id = $1 AND s.company_id = $2
-            `;
+            const { data: sale, error } = await database.supabase
+                .from('sales')
+                .select('*, users!sales_user_id_fkey (name, email)')
+                .eq('id', saleId)
+                .eq('company_id', companyId)
+                .single();
 
-            const result = await database.query(query, [saleId, companyId]);
+            if (error && error.code !== 'PGRST116') throw error;
+            if (!sale) return null;
 
-            if (result.rows.length === 0) {
-                return null;
-            }
-
-            const sale = result.rows[0];
-
-            // Parse products JSON
-            sale.products = typeof sale.products === 'string'
-                ? JSON.parse(sale.products)
-                : sale.products;
-
-            return sale;
+            return {
+                ...sale,
+                seller_name: sale.users?.name,
+                seller_email: sale.users?.email
+            };
         } catch (error) {
             logger.error('Error finding sale by ID:', error);
             throw error;
         }
     }
 
-    /**
-     * Get sales by company with pagination and filters
-     * @param {Object} filters - Filter options
-     * @returns {Promise<Object>} Sales with pagination info
-     */
     static async getByCompany({
         companyId,
         startDate,
@@ -127,91 +107,35 @@ class SaleModel {
         try {
             const offset = (page - 1) * limit;
 
-            // Build WHERE conditions
-            const conditions = ['s.company_id = $1'];
-            const params = [companyId];
-            let paramCount = 2;
+            let query = database.supabase
+                .from('sales')
+                .select('*, users!sales_user_id_fkey (name, email)', { count: 'exact' })
+                .eq('company_id', companyId);
 
-            if (startDate) {
-                conditions.push(`s.sale_date >= $${paramCount}`);
-                params.push(startDate);
-                paramCount++;
-            }
+            if (startDate) query = query.gte('sale_date', startDate);
+            if (endDate) query = query.lte('sale_date', endDate);
+            if (customerName) query = query.ilike('customer_name', `%${customerName}%`);
+            if (serialNumber) query = query.ilike('serial_number', `%${serialNumber}%`);
+            if (userId) query = query.eq('user_id', userId);
+            if (paymentMethod) query = query.eq('payment_method', paymentMethod);
 
-            if (endDate) {
-                conditions.push(`s.sale_date <= $${paramCount}`);
-                params.push(endDate);
-                paramCount++;
-            }
-
-            if (customerName) {
-                conditions.push(`s.customer_name ILIKE $${paramCount}`);
-                params.push(`%${customerName}%`);
-                paramCount++;
-            }
-
-            if (serialNumber) {
-                conditions.push(`s.serial_number ILIKE $${paramCount}`);
-                params.push(`%${serialNumber}%`);
-                paramCount++;
-            }
-
-            if (userId) {
-                conditions.push(`s.user_id = $${paramCount}`);
-                params.push(userId);
-                paramCount++;
-            }
-
-            if (paymentMethod) {
-                conditions.push(`s.payment_method = $${paramCount}`);
-                params.push(paymentMethod);
-                paramCount++;
-            }
-
-            const whereClause = conditions.join(' AND ');
-
-            // Build ORDER BY clause
             const validSortFields = ['sale_date', 'customer_name', 'total_amount', 'created_at'];
             const sortField = validSortFields.includes(sortBy) ? sortBy : 'sale_date';
-            const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+            const ascending = sortOrder.toUpperCase() !== 'DESC';
 
-            // Main query for sales
-            const query = `
-                SELECT
-                    s.*,
-                    u.name as seller_name,
-                    u.email as seller_email,
-                    (SELECT COUNT(*) FROM warranties w WHERE w.sale_id = s.id) as has_warranty
-                FROM sales s
-                LEFT JOIN users u ON s.user_id = u.id
-                WHERE ${whereClause}
-                ORDER BY s.${sortField} ${order}
-                LIMIT $${paramCount} OFFSET $${paramCount + 1}
-            `;
+            query = query.order(sortField, { ascending }).range(offset, offset + limit - 1);
 
-            // Count query for pagination
-            const countQuery = `
-                SELECT COUNT(*) as total
-                FROM sales s
-                WHERE ${whereClause}
-            `;
+            const { data, error, count } = await query;
+            if (error) throw error;
 
-            // Execute queries
-            const [salesResult, countResult] = await Promise.all([
-                database.query(query, [...params, limit, offset]),
-                database.query(countQuery, params)
-            ]);
-
-            const total = parseInt(countResult.rows[0].total);
-            const totalPages = Math.ceil(total / limit);
-
-            // Parse products JSON for each sale
-            const sales = salesResult.rows.map(sale => ({
+            const sales = (data || []).map(sale => ({
                 ...sale,
-                products: typeof sale.products === 'string'
-                    ? JSON.parse(sale.products)
-                    : sale.products
+                seller_name: sale.users?.name,
+                seller_email: sale.users?.email
             }));
+
+            const total = count || 0;
+            const totalPages = Math.ceil(total / limit);
 
             return {
                 sales,
@@ -230,101 +154,56 @@ class SaleModel {
         }
     }
 
-    /**
-     * Update sale
-     * @param {string} saleId - Sale ID
-     * @param {string} companyId - Company ID
-     * @param {Object} updates - Fields to update
-     * @returns {Promise<Object>} Updated sale
-     */
     static async update(saleId, companyId, updates) {
         try {
             const allowedFields = [
                 'customer_name', 'customer_email', 'customer_phone', 'customer_address',
                 'products', 'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
-                'serial_number', 'warranty_months', 'payment_method', 'notes'
+                'serial_number', 'serial_image_url', 'warranty_months', 'payment_method',
+                'notes', 'sale_date'
             ];
 
-            const fields = [];
-            const values = [];
-            let paramCount = 1;
-
+            const updateData = {};
             Object.keys(updates).forEach(key => {
                 if (allowedFields.includes(key)) {
-                    if (key === 'products') {
-                        fields.push(`products = $${paramCount}`);
-                        values.push(JSON.stringify(updates[key]));
-                    } else {
-                        fields.push(`${key} = $${paramCount}`);
-                        values.push(updates[key]);
-                    }
-                    paramCount++;
+                    updateData[key] = updates[key];
                 }
             });
 
-            if (fields.length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 throw new Error('No valid fields to update');
             }
 
-            values.push(saleId);
-            values.push(companyId);
+            const { data, error } = await database.supabase
+                .from('sales')
+                .update(updateData)
+                .eq('id', saleId)
+                .eq('company_id', companyId)
+                .select()
+                .single();
 
-            const query = `
-                UPDATE sales
-                SET ${fields.join(', ')}, updated_at = NOW()
-                WHERE id = $${paramCount} AND company_id = $${paramCount + 1}
-                RETURNING *
-            `;
+            if (error) throw error;
+            if (!data) throw new Error('Sale not found');
 
-            const result = await database.query(query, values);
-
-            if (result.rows.length === 0) {
-                throw new Error('Sale not found');
-            }
-
-            logger.business('sale_updated', 'sale', saleId, {
-                companyId,
-                updatedFields: Object.keys(updates)
-            });
-
-            return result.rows[0];
+            logger.business('sale_updated', 'sale', saleId, { companyId, updates });
+            return data;
         } catch (error) {
             logger.error('Error updating sale:', error);
             throw error;
         }
     }
 
-    /**
-     * Delete sale
-     * @param {string} saleId - Sale ID
-     * @param {string} companyId - Company ID
-     * @returns {Promise<boolean>} Success status
-     */
     static async delete(saleId, companyId) {
         try {
-            // Start transaction
-            await database.transaction(async (client) => {
-                // First, delete related warranty if exists
-                await client.query(
-                    'DELETE FROM warranties WHERE sale_id = $1',
-                    [saleId]
-                );
+            const { error } = await database.supabase
+                .from('sales')
+                .delete()
+                .eq('id', saleId)
+                .eq('company_id', companyId);
 
-                // Then delete the sale
-                const result = await client.query(
-                    'DELETE FROM sales WHERE id = $1 AND company_id = $2',
-                    [saleId, companyId]
-                );
+            if (error) throw error;
 
-                if (result.rowCount === 0) {
-                    throw new Error('Sale not found');
-                }
-            });
-
-            logger.business('sale_deleted', 'sale', saleId, {
-                companyId
-            });
-
+            logger.business('sale_deleted', 'sale', saleId, { companyId });
             return true;
         } catch (error) {
             logger.error('Error deleting sale:', error);
@@ -332,81 +211,72 @@ class SaleModel {
         }
     }
 
-    /**
-     * Get sales statistics for a company
-     * @param {string} companyId - Company ID
-     * @param {Object} dateRange - Date range for statistics
-     * @returns {Promise<Object>} Sales statistics
-     */
     static async getStatistics(companyId, dateRange = null) {
         try {
-            let dateFilter = '';
-            const params = [companyId];
+            let query = database.supabase
+                .from('sales')
+                .select('total_amount, subtotal, tax_amount, discount_amount, payment_method')
+                .eq('company_id', companyId);
 
-            if (dateRange) {
-                if (dateRange.startDate) {
-                    dateFilter += ` AND s.sale_date >= $${params.length + 1}`;
-                    params.push(dateRange.startDate);
-                }
-                if (dateRange.endDate) {
-                    dateFilter += ` AND s.sale_date <= $${params.length + 1}`;
-                    params.push(dateRange.endDate);
-                }
+            if (dateRange && dateRange.startDate) {
+                query = query.gte('sale_date', dateRange.startDate);
+            }
+            if (dateRange && dateRange.endDate) {
+                query = query.lte('sale_date', dateRange.endDate);
             }
 
-            const query = `
-                SELECT
-                    COUNT(*) as total_sales,
-                    SUM(s.total_amount) as total_revenue,
-                    AVG(s.total_amount) as average_sale,
-                    COUNT(DISTINCT s.user_id) as unique_sellers,
-                    COUNT(DISTINCT s.customer_name) as unique_customers,
-                    SUM(s.discount_amount) as total_discounts,
-                    COUNT(CASE WHEN s.serial_number IS NOT NULL THEN 1 END) as sales_with_serial,
-                    COUNT(CASE WHEN s.warranty_months > 0 THEN 1 END) as sales_with_warranty
-                FROM sales s
-                WHERE s.company_id = $1${dateFilter}
-            `;
+            const { data, error } = await query;
+            if (error) throw error;
 
-            const result = await database.query(query, params);
+            const totalSales = data.length;
+            const totalRevenue = data.reduce((sum, s) => sum + (s.total_amount || 0), 0);
+            const totalSubtotal = data.reduce((sum, s) => sum + (s.subtotal || 0), 0);
+            const totalTax = data.reduce((sum, s) => sum + (s.tax_amount || 0), 0);
+            const totalDiscount = data.reduce((sum, s) => sum + (s.discount_amount || 0), 0);
+            const avgSale = totalSales > 0 ? totalRevenue / totalSales : 0;
 
-            return result.rows[0];
+            const paymentMethodCounts = {};
+            data.forEach(s => {
+                const method = s.payment_method || 'unknown';
+                paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
+            });
+
+            const amounts = data.map(s => s.total_amount || 0).filter(a => a > 0);
+            const largestSale = amounts.length > 0 ? Math.max(...amounts) : 0;
+            const smallestSale = amounts.length > 0 ? Math.min(...amounts) : 0;
+
+            return {
+                total_sales: totalSales,
+                total_revenue: totalRevenue,
+                total_subtotal: totalSubtotal,
+                total_tax: totalTax,
+                total_discount: totalDiscount,
+                average_sale: avgSale,
+                largest_sale: largestSale,
+                smallest_sale: smallestSale,
+                payment_methods: paymentMethodCounts
+            };
         } catch (error) {
-            logger.error('Error getting sales statistics:', error);
+            logger.error('Error getting sale statistics:', error);
             throw error;
         }
     }
 
-    /**
-     * Get sales by date range for a company
-     * @param {string} companyId - Company ID
-     * @param {Date} startDate - Start date
-     * @param {Date} endDate - End date
-     * @returns {Promise<Array>} Sales in date range
-     */
     static async getByDateRange(companyId, startDate, endDate) {
         try {
-            const query = `
-                SELECT
-                    s.*,
-                    u.name as seller_name,
-                    u.email as seller_email
-                FROM sales s
-                LEFT JOIN users u ON s.user_id = u.id
-                WHERE s.company_id = $1
-                  AND s.sale_date >= $2
-                  AND s.sale_date <= $3
-                ORDER BY s.sale_date ASC
-            `;
+            const { data, error } = await database.supabase
+                .from('sales')
+                .select('*, users!sales_user_id_fkey (name)')
+                .eq('company_id', companyId)
+                .gte('sale_date', startDate)
+                .lte('sale_date', endDate)
+                .order('sale_date', { ascending: false });
 
-            const result = await database.query(query, [companyId, startDate, endDate]);
+            if (error) throw error;
 
-            // Parse products JSON for each sale
-            return result.rows.map(sale => ({
+            return (data || []).map(sale => ({
                 ...sale,
-                products: typeof sale.products === 'string'
-                    ? JSON.parse(sale.products)
-                    : sale.products
+                seller_name: sale.users?.name
             }));
         } catch (error) {
             logger.error('Error getting sales by date range:', error);
@@ -414,142 +284,112 @@ class SaleModel {
         }
     }
 
-    /**
-     * Get top selling products for a company
-     * @param {string} companyId - Company ID
-     * @param {number} limit - Number of top products to return
-     * @param {Object} dateRange - Date range filter
-     * @returns {Promise<Array>} Top selling products
-     */
     static async getTopSellingProducts(companyId, limit = 10, dateRange = null) {
         try {
-            let dateFilter = '';
-            const params = [companyId];
+            let query = database.supabase
+                .from('sales')
+                .select('products')
+                .eq('company_id', companyId);
 
-            if (dateRange) {
-                if (dateRange.startDate) {
-                    dateFilter += ` AND s.sale_date >= $${params.length + 1}`;
-                    params.push(dateRange.startDate);
-                }
-                if (dateRange.endDate) {
-                    dateFilter += ` AND s.sale_date <= $${params.length + 1}`;
-                    params.push(dateRange.endDate);
-                }
+            if (dateRange && dateRange.startDate) {
+                query = query.gte('sale_date', dateRange.startDate);
+            }
+            if (dateRange && dateRange.endDate) {
+                query = query.lte('sale_date', dateRange.endDate);
             }
 
-            const query = `
-                SELECT
-                    p.id,
-                    p.sku,
-                    p.name,
-                    p.price,
-                    SUM((product->>'quantity')::int) as total_quantity_sold,
-                    SUM(((product->>'quantity')::int * (product->>'unit_price')::decimal)) as total_revenue,
-                    COUNT(DISTINCT s.id) as sale_count
-                FROM sales s
-                CROSS JOIN jsonb_array_elements(s.products) as product
-                LEFT JOIN products p ON (product->>'product_id')::uuid = p.id
-                WHERE s.company_id = $1${dateFilter}
-                GROUP BY p.id, p.sku, p.name, p.price
-                ORDER BY total_quantity_sold DESC
-                LIMIT $${params.length + 1}
-            `;
+            const { data, error } = await query;
+            if (error) throw error;
 
-            params.push(limit);
+            const productCounts = {};
+            data.forEach(sale => {
+                const products = sale.products || [];
+                products.forEach(p => {
+                    const id = p.product_id || p.id;
+                    if (!id) return;
+                    if (!productCounts[id]) {
+                        productCounts[id] = {
+                            product_id: id,
+                            product_name: p.name || p.product_name || 'Unknown',
+                            total_quantity: 0,
+                            total_revenue: 0
+                        };
+                    }
+                    productCounts[id].total_quantity += p.quantity || 0;
+                    productCounts[id].total_revenue += (p.price || 0) * (p.quantity || 0);
+                });
+            });
 
-            const result = await database.query(query, params);
+            const topProducts = Object.values(productCounts)
+                .sort((a, b) => b.total_quantity - a.total_quantity)
+                .slice(0, limit);
 
-            return result.rows;
+            return topProducts;
         } catch (error) {
             logger.error('Error getting top selling products:', error);
             throw error;
         }
     }
 
-    /**
-     * Get sales performance by seller
-     * @param {string} companyId - Company ID
-     * @param {Object} dateRange - Date range filter
-     * @returns {Promise<Array>} Sales performance by seller
-     */
     static async getSalesBySeller(companyId, dateRange = null) {
         try {
-            let dateFilter = '';
-            const params = [companyId];
+            let query = database.supabase
+                .from('sales')
+                .select('user_id, total_amount, users!sales_user_id_fkey (name, email)')
+                .eq('company_id', companyId);
 
-            if (dateRange) {
-                if (dateRange.startDate) {
-                    dateFilter += ` AND s.sale_date >= $${params.length + 1}`;
-                    params.push(dateRange.startDate);
-                }
-                if (dateRange.endDate) {
-                    dateFilter += ` AND s.sale_date <= $${params.length + 1}`;
-                    params.push(dateRange.endDate);
-                }
+            if (dateRange && dateRange.startDate) {
+                query = query.gte('sale_date', dateRange.startDate);
+            }
+            if (dateRange && dateRange.endDate) {
+                query = query.lte('sale_date', dateRange.endDate);
             }
 
-            const query = `
-                SELECT
-                    u.id,
-                    u.name,
-                    u.email,
-                    COUNT(s.id) as total_sales,
-                    SUM(s.total_amount) as total_revenue,
-                    AVG(s.total_amount) as average_sale,
-                    MAX(s.sale_date) as last_sale_date
-                FROM sales s
-                INNER JOIN users u ON s.user_id = u.id
-                WHERE s.company_id = $1${dateFilter}
-                GROUP BY u.id, u.name, u.email
-                ORDER BY total_revenue DESC
-            `;
+            const { data, error } = await query;
+            if (error) throw error;
 
-            const result = await database.query(query, params);
+            const sellerStats = {};
+            data.forEach(sale => {
+                const userId = sale.user_id;
+                if (!sellerStats[userId]) {
+                    sellerStats[userId] = {
+                        user_id: userId,
+                        seller_name: sale.users?.name || 'Unknown',
+                        seller_email: sale.users?.email,
+                        total_sales: 0,
+                        total_revenue: 0
+                    };
+                }
+                sellerStats[userId].total_sales += 1;
+                sellerStats[userId].total_revenue += sale.total_amount || 0;
+            });
 
-            return result.rows;
+            return Object.values(sellerStats)
+                .sort((a, b) => b.total_revenue - a.total_revenue);
         } catch (error) {
             logger.error('Error getting sales by seller:', error);
             throw error;
         }
     }
 
-    /**
-     * Search sales by serial number
-     * @param {string} companyId - Company ID
-     * @param {string} serialNumber - Serial number to search
-     * @returns {Promise<Object|null>} Sale with matching serial number
-     */
     static async findBySerialNumber(companyId, serialNumber) {
         try {
-            const query = `
-                SELECT
-                    s.*,
-                    u.name as seller_name,
-                    u.email as seller_email,
-                    p.name as product_name,
-                    p.sku as product_sku
-                FROM sales s
-                LEFT JOIN users u ON s.user_id = u.id
-                LEFT JOIN products p ON (s.products->0->>'product_id')::uuid = p.id
-                WHERE s.company_id = $1 AND s.serial_number ILIKE $2
-            `;
+            const { data, error } = await database.supabase
+                .from('sales')
+                .select('*, users!sales_user_id_fkey (name, email)')
+                .eq('company_id', companyId)
+                .ilike('serial_number', `%${serialNumber}%`)
+                .order('sale_date', { ascending: false });
 
-            const result = await database.query(query, [companyId, `%${serialNumber}%`]);
+            if (error) throw error;
 
-            if (result.rows.length === 0) {
-                return null;
-            }
-
-            const sale = result.rows[0];
-
-            // Parse products JSON
-            sale.products = typeof sale.products === 'string'
-                ? JSON.parse(sale.products)
-                : sale.products;
-
-            return sale;
+            return (data || []).map(sale => ({
+                ...sale,
+                seller_name: sale.users?.name,
+                seller_email: sale.users?.email
+            }));
         } catch (error) {
-            logger.error('Error finding sale by serial number:', error);
+            logger.error('Error finding sales by serial number:', error);
             throw error;
         }
     }

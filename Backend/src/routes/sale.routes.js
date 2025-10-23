@@ -2,6 +2,8 @@ import express from 'express';
 import SaleController from '../controllers/sale.controller.js';
 import { authenticateJWT } from '../middlewares/auth.middleware.js';
 import { setCompanyContext, checkResourcePermission } from '../middlewares/role.middleware.js';
+import { validate } from '../middlewares/validation.middleware.js';
+import { schemas } from '../validations/sale.schema.js';
 
 const router = express.Router();
 
@@ -55,6 +57,17 @@ router.use(setCompanyContext);
  *         description: Sales retrieved successfully
  */
 router.get('/', checkResourcePermission('sale', 'read'), SaleController.getAll);
+
+/**
+ * @swagger
+ * /api/v1/sales/statistics:
+ *   get:
+ *     summary: Get sales statistics
+ *     tags: [Sales]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/statistics', checkResourcePermission('sale', 'read'), SaleController.getStatistics);
 
 /**
  * @swagger
@@ -128,7 +141,7 @@ router.get('/:id', checkResourcePermission('sale', 'read'), SaleController.getBy
  *       201:
  *         description: Sale created successfully
  */
-router.post('/', checkResourcePermission('sale', 'create'), SaleController.create);
+router.post('/', checkResourcePermission('sale', 'create'), validate(schemas.createSale, 'body'), SaleController.create);
 
 /**
  * @swagger
@@ -151,16 +164,5 @@ router.put('/:id', checkResourcePermission('sale', 'update'), SaleController.upd
  *       - bearerAuth: []
  */
 router.delete('/:id', checkResourcePermission('sale', 'delete'), SaleController.delete);
-
-/**
- * @swagger
- * /api/v1/sales/statistics:
- *   get:
- *     summary: Get sales statistics
- *     tags: [Sales]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/statistics', checkResourcePermission('sale', 'read'), SaleController.getStatistics);
 
 export default router;

@@ -1,5 +1,6 @@
 import ProductModel from '../models/product.model.js';
 import { logger } from '../config/logger.js';
+import { cloudinary } from '../config/cloudinary.js';
 import ResponseHandler from '../utils/responseHandler.js';
 
 /**
@@ -13,25 +14,40 @@ class ProductController {
      */
     static async getAll(req, res) {
         try {
-            const {
-                page = 1,
-                limit = 20,
-                category,
-                search,
-                stock_status,
-                sort_by = 'name',
-                sort_order = 'ASC'
-            } = req.query;
+            // Parse and validate query parameters
+            const page = Math.max(1, parseInt(req.query.page) || 1);
+            const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
+            const category = req.query.category_id || req.query.category || undefined;
+            const search = req.query.search ? String(req.query.search).trim() : undefined;
+            const stock_status = req.query.stock_status || undefined;
+            const sort_by = req.query.sort_by || 'name';
+            const sort_order = req.query.sort_order || 'ASC';
+
+            // Validate sort fields
+            const validSortFields = ['name', 'sku', 'price', 'stock', 'created_at'];
+            if (!validSortFields.includes(sort_by)) {
+                return ResponseHandler.badRequest(res, `Invalid sort_by field. Valid options: ${validSortFields.join(', ')}`);
+            }
+
+            // Validate sort order
+            if (!['ASC', 'DESC'].includes(sort_order.toUpperCase())) {
+                return ResponseHandler.badRequest(res, 'Invalid sort_order. Use ASC or DESC');
+            }
+
+            // Validate stock_status if provided
+            if (stock_status && !['low', 'out', 'available'].includes(stock_status)) {
+                return ResponseHandler.badRequest(res, 'Invalid stock_status. Valid options: low, out, available');
+            }
 
             const filters = {
                 companyId: req.companyId,
                 categoryId: category,
                 search,
                 stockStatus: stock_status,
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page,
+                limit,
                 sortBy: sort_by,
-                sortOrder: sort_order
+                sortOrder: sort_order.toUpperCase()
             };
 
             const result = await ProductModel.getByCompany(filters);
@@ -81,18 +97,48 @@ class ProductController {
      */
     static async create(req, res) {
         try {
+            let imageUrl = req.body.image_url;
+
+            // Handle image upload if file is provided
+            if (req.file) {
+                try {
+                    const result = await new Promise((resolve, reject) => {
+                        const stream = cloudinary.uploader.upload_stream(
+                            {
+                                folder: 'stockly/products',
+                                public_id: `product_${Date.now()}`,
+                                transformation: [
+                                    { width: 800, height: 800, crop: 'limit' },
+                                    { quality: 'auto' }
+                                ]
+                            },
+                            (error, result) => {
+                                if (error) reject(error);
+                                else resolve(result);
+                            }
+                        );
+                        stream.end(req.file.buffer);
+                    });
+                    imageUrl = result.secure_url;
+                } catch (uploadError) {
+                    logger.error('Image upload failed:', uploadError);
+                    // Continue without image, don't fail the product creation
+                }
+            }
+
             const productData = {
                 companyId: req.companyId,
                 categoryId: req.body.category_id,
                 sku: req.body.sku,
                 name: req.body.name,
+                brand: req.body.brand,
                 description: req.body.description,
                 price: req.body.price !== undefined && req.body.price !== null 
                     ? parseFloat(req.body.price) 
                     : 0, // Price is now optional, defaults to 0
                 stock: parseInt(req.body.stock) || 0,
                 minStock: parseInt(req.body.min_stock) || 5,
-                imageUrl: req.body.image_url,
+                imageUrl,
                 barcode: req.body.barcode,
                 condition: req.body.condition || 'new'
             };
@@ -103,8 +149,9 @@ class ProductController {
                 productId: product.id,
                 companyId: req.companyId,
                 sku: product.sku,
-                condition: product.condition,
-                hasPrice: req.body.price !== undefined
+                name: product.name,
+                brand: product.brand,
+                condition: product.condition
             });
 
             ResponseHandler.success(res, product, 'Product created successfully', 201);

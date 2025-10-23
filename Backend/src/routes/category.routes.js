@@ -9,17 +9,7 @@ const router = express.Router();
 router.use(authenticateJWT);
 router.use(setCompanyContext);
 
-/**
- * @swagger
- * /api/v1/categories:
- *   get:
- *     summary: Get all categories
- *     tags: [Categories]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/', checkResourcePermission('category', 'read'), CategoryController.getAll);
-
+// GET routes with specific paths must come BEFORE parameterized routes
 /**
  * @swagger
  * /api/v1/categories/tree:
@@ -37,6 +27,17 @@ router.get('/tree', checkResourcePermission('category', 'read'), CategoryControl
 /**
  * @swagger
  * /api/v1/categories:
+ *   get:
+ *     summary: Get all categories
+ *     tags: [Categories]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/', checkResourcePermission('category', 'read'), CategoryController.getAll);
+
+/**
+ * @swagger
+ * /api/v1/categories:
  *   post:
  *     summary: Create new category
  *     tags: [Categories]
@@ -44,6 +45,18 @@ router.get('/tree', checkResourcePermission('category', 'read'), CategoryControl
  *       - bearerAuth: []
  */
 router.post('/', checkResourcePermission('category', 'create'), CategoryController.create);
+
+// Parameterized routes come AFTER specific routes
+/**
+ * @swagger
+ * /api/v1/categories/:id/products:
+ *   get:
+ *     summary: Get products in category
+ *     tags: [Categories]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/:id/products', checkResourcePermission('category', 'read'), CategoryController.getProducts);
 
 /**
  * @swagger
@@ -55,17 +68,6 @@ router.post('/', checkResourcePermission('category', 'create'), CategoryControll
  *       - bearerAuth: []
  */
 router.get('/:id', checkResourcePermission('category', 'read'), CategoryController.getById);
-
-/**
- * @swagger
- * /api/v1/categories/:id/products:
- *   get:
- *     summary: Get products in category
- *     tags: [Categories]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/:id/products', checkResourcePermission('category', 'read'), CategoryController.getProducts);
 
 /**
  * @swagger

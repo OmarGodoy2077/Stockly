@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import ProductController from '../controllers/product.controller.js';
 import { authenticateJWT } from '../middlewares/auth.middleware.js';
 import { setCompanyContext, requireInventoryAccess, checkResourcePermission } from '../middlewares/role.middleware.js';
@@ -6,6 +7,21 @@ import { validate } from '../middlewares/validation.middleware.js';
 import { schemas } from '../validations/product.schema.js';
 
 const router = express.Router();
+
+// Configure multer for product image uploads
+const upload = multer({
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow only image files
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'));
+        }
+    }
+});
 
 // All product routes require authentication and company context
 router.use(authenticateJWT);
@@ -68,7 +84,7 @@ router.use(setCompanyContext);
  *       401:
  *         description: Unauthorized
  */
-router.get('/', validate(schemas.productQuery, 'query'), ProductController.getAll);
+router.get('/', ProductController.getAll);
 
 /**
  * @swagger
@@ -205,7 +221,7 @@ router.get('/:id', checkResourcePermission('product', 'read'), ProductController
  *       400:
  *         description: Invalid input data
  */
-router.post('/', requireInventoryAccess, validate(schemas.createProduct, 'body'), ProductController.create);
+router.post('/', requireInventoryAccess, upload.single('image'), validate(schemas.createProduct, 'body'), ProductController.create);
 
 /**
  * @swagger

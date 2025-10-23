@@ -274,6 +274,62 @@ class InvitationModel {
             throw error;
         }
     }
+
+    /**
+     * Find invitation by ID
+     * @param {string} id - Invitation ID
+     * @returns {Promise<Object|null>} Invitation data or null
+     */
+    static async findById(id) {
+        try {
+            const { data, error } = await database.supabase
+                .from('invitations')
+                .select('id, company_id, code, role, created_by, created_at, expires_at, is_active')
+                .eq('id', id)
+                .single();
+
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
+
+            return data || null;
+        } catch (error) {
+            logger.error('Error finding invitation by ID:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Deactivate invitation by ID
+     * @param {string} id - Invitation ID
+     * @returns {Promise<Object>} Updated invitation
+     */
+    static async deactivateById(id) {
+        try {
+            const { data, error } = await database.supabase
+                .from('invitations')
+                .update({ is_active: false })
+                .eq('id', id)
+                .select('id, company_id, code, is_active');
+
+            if (error) {
+                throw error;
+            }
+
+            if (!data || data.length === 0) {
+                throw new Error('Invitation not found');
+            }
+
+            logger.business('invitation_deactivated', 'invitation', id, {
+                deactivatedAt: new Date().toISOString()
+            });
+
+            return data[0];
+        } catch (error) {
+            logger.error('Error deactivating invitation by ID:', error);
+            throw error;
+        }
+    }
 }
 
 export default InvitationModel;

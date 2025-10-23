@@ -38,6 +38,25 @@ class ResponseHandler {
     }
 
     /**
+     * Send created response
+     * @param {Object} res - Express response object
+     * @param {Object} data - Response data
+     * @param {string} message - Success message
+     */
+    static created(res, data = null, message = 'Resource created successfully') {
+        return this.success(res, data, message, 201);
+    }
+
+    /**
+     * Send bad request response
+     * @param {Object} res - Express response object
+     * @param {string} message - Error message
+     */
+    static badRequest(res, message = 'Bad request') {
+        return this.error(res, message, 400);
+    }
+
+    /**
      * Send error response
      * @param {Object} res - Express response object
      * @param {string} message - Error message

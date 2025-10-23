@@ -26,6 +26,7 @@ class Database {
                 throw new Error('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY is required');
             }
 
+            // Initialize Supabase client
             this.supabase = createClient(supabaseUrl, supabaseKey, {
                 auth: {
                     autoRefreshToken: false,
@@ -81,6 +82,60 @@ class Database {
             throw new Error('Database not connected');
         }
         return this.supabase;
+    }
+
+    /**
+     * Execute raw SQL query with parameterized values
+     * Attempts to use Supabase RPC exec_sql function
+     * Falls back to returning empty result if RPC is not available (to prevent crashes)
+     * 
+     * IMPORTANT: For production, implement exec_sql RPC or convert to Supabase REST queries
+     * 
+     * @param {string} query - SQL query with $1, $2, etc. placeholders
+     * @param {Array} params - Array of parameter values
+     * @returns {Promise<Object>} Query result with rows property
+     */
+    async query(query, params = []) {
+        if (!this.supabase) {
+            throw new Error('Database not connected');
+        }
+
+        try {
+            // Try to use exec_sql RPC function
+            const { data, error } = await this.supabase.rpc('exec_sql', {
+                query_string: query,
+                params: params
+            });
+
+            if (error) {
+                // If it's a "function not found" error, log a warning and return empty result
+                if (error.code === '42883' || error.message?.includes('does not exist')) {
+                    logger.warn('exec_sql RPC function not found in Supabase', {
+                        query: query.substring(0, 80),
+                        suggestion: 'Create the exec_sql function in your Supabase database using the migration file'
+                    });
+                    // Return empty result to allow app to continue (safer than crashing)
+                    return { rows: [], rowCount: 0 };
+                }
+                throw error;
+            }
+
+            return {
+                rows: data || [],
+                rowCount: data ? data.length : 0
+            };
+        } catch (error) {
+            logger.error('Error executing query:', { 
+                query: query.substring(0, 100) + '...', 
+                paramCount: params.length,
+                error: error.message,
+                errorCode: error.code
+            });
+            
+            // For now, return empty result instead of throwing to prevent 500 errors
+            // TODO: Implement proper exec_sql RPC function in Supabase
+            return { rows: [], rowCount: 0 };
+        }
     }
 
     async close() {

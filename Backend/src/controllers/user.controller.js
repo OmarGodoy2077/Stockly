@@ -216,66 +216,61 @@ class UserController {
 
             const offset = (parseInt(page) - 1) * parseInt(limit);
 
-            let query = `
-                SELECT
-                    u.id,
-                    u.email,
-                    u.name,
-                    u.phone,
-                    u.is_active,
-                    u.last_login_at,
-                    u.created_at,
-                    uc.role,
-                    uc.is_active as company_member_active,
-                    uc.joined_at,
-                    uc.invited_by,
-                    inviter.name as invited_by_name
-                FROM users u
-                INNER JOIN user_company uc ON u.id = uc.user_id
-                LEFT JOIN users inviter ON uc.invited_by = inviter.id
-                WHERE uc.company_id = $1
-            `;
+            // Build Supabase query
+            let dbQuery = database.supabase
+                .from('user_company')
+                .select(`
+                    user_id,
+                    role,
+                    is_active,
+                    joined_at,
+                    invited_by,
+                    users!user_id(id, email, name, phone, is_active, last_login_at),
+                    inviter:users!invited_by(name)
+                `)
+                .eq('company_id', companyId)
+                .order('joined_at', { ascending: false });
 
-            const params = [companyId];
-            let paramCount = 2;
-
+            // Apply filters
             if (role) {
-                query += ` AND uc.role = $${paramCount}`;
-                params.push(role);
-                paramCount++;
+                dbQuery = dbQuery.eq('role', role);
             }
 
             if (search) {
-                query += ` AND (u.name ILIKE $${paramCount} OR u.email ILIKE $${paramCount})`;
-                params.push(`%${search}%`);
-                paramCount++;
+                // Note: Supabase REST API has limited text search capabilities
+                // This is a workaround using client-side filtering for now
+                // For production, consider using full-text search functions
+                dbQuery = dbQuery.or(`users.name.ilike.%${search}%,users.email.ilike.%${search}%`);
             }
 
             // Get total count
-            const countQuery = query.replace(/SELECT.*FROM/, 'SELECT COUNT(*) FROM');
-            const countResult = await database.query(countQuery, params);
-            const total = parseInt(countResult.rows[0].count);
+            const { count } = await dbQuery.select('id', { count: 'exact', head: true });
+            const total = count || 0;
 
             // Add pagination
-            query += ` ORDER BY uc.joined_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-            params.push(parseInt(limit), offset);
+            dbQuery = dbQuery
+                .range(offset, offset + parseInt(limit) - 1);
 
-            const result = await database.query(query, params);
+            const { data, error } = await dbQuery;
+
+            if (error) {
+                throw error;
+            }
 
             res.json({
                 success: true,
                 data: {
-                    users: result.rows.map(user => ({
-                        id: user.id,
-                        email: user.email,
-                        name: user.name,
-                        phone: user.phone,
-                        isActive: user.is_active,
-                        role: user.role,
-                        lastLogin: user.last_login_at,
-                        joinedAt: user.joined_at,
-                        invitedBy: user.invited_by_name
-                    })),
+                    users: (data || []).map(uc => ({
+                        id: uc.users?.id,
+                        email: uc.users?.email,
+                        name: uc.users?.name,
+                        phone: uc.users?.phone,
+                        isActive: uc.users?.is_active,
+                        role: uc.role,
+                        lastLogin: uc.users?.last_login_at,
+                        joinedAt: uc.joined_at,
+                        invitedBy: uc.inviter?.name || null
+                    })).filter(user => user.id), // Filter out users without valid user data
                     pagination: {
                         page: parseInt(page),
                         limit: parseInt(limit),
@@ -303,37 +298,29 @@ class UserController {
             const { userId } = req.params;
             const companyId = req.companyId;
 
-            // Verify user belongs to this company
-            const query = `
-                SELECT
-                    u.id,
-                    u.email,
-                    u.name,
-                    u.phone,
-                    u.is_active,
-                    u.last_login_at,
-                    u.created_at,
-                    uc.role,
-                    uc.is_active as company_member_active,
-                    uc.joined_at,
-                    uc.invited_by,
-                    inviter.name as invited_by_name
-                FROM users u
-                INNER JOIN user_company uc ON u.id = uc.user_id
-                LEFT JOIN users inviter ON uc.invited_by = inviter.id
-                WHERE u.id = $1 AND uc.company_id = $2
-            `;
+            // Verify user belongs to this company using Supabase REST API
+            const { data: userCompanyData, error: ucError } = await database.supabase
+                .from('user_company')
+                .select(`
+                    user_id,
+                    role,
+                    is_active,
+                    joined_at,
+                    users!user_id(id, email, name, phone, is_active, last_login_at, created_at),
+                    inviter:users!invited_by(name)
+                `)
+                .eq('user_id', userId)
+                .eq('company_id', companyId)
+                .single();
 
-            const result = await database.query(query, [userId, companyId]);
-
-            if (result.rows.length === 0) {
+            if (ucError || !userCompanyData) {
                 return res.status(404).json({
                     success: false,
                     error: 'User not found in this company'
                 });
             }
 
-            const user = result.rows[0];
+            const user = userCompanyData.users;
 
             res.json({
                 success: true,
@@ -343,10 +330,10 @@ class UserController {
                     name: user.name,
                     phone: user.phone,
                     isActive: user.is_active,
-                    role: user.role,
+                    role: userCompanyData.role,
                     lastLogin: user.last_login_at,
-                    joinedAt: user.joined_at,
-                    invitedBy: user.invited_by_name,
+                    joinedAt: userCompanyData.joined_at,
+                    invitedBy: userCompanyData.inviter?.name || null,
                     createdAt: user.created_at
                 }
             });

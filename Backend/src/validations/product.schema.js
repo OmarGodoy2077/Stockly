@@ -9,11 +9,16 @@ const productBaseSchema = z.object({
     sku: z.string()
         .min(1, 'SKU es requerido')
         .max(100, 'SKU no puede exceder 100 caracteres')
-        .regex(/^[A-Z0-9\-_]+$/, 'SKU solo puede contener letras, números, guiones y guiones bajos'),
+        .regex(/^[A-Z0-9\-_]+$/, 'SKU solo puede contener letras, números, guiones y guiones bajos')
+        .optional(),
 
     name: z.string()
         .min(1, 'Nombre es requerido')
         .max(255, 'Nombre no puede exceder 255 caracteres'),
+
+    brand: z.string()
+        .max(255, 'Marca no puede exceder 255 caracteres')
+        .optional(),
 
     description: z.string()
         .max(1000, 'Descripción no puede exceder 1000 caracteres')
@@ -21,12 +26,16 @@ const productBaseSchema = z.object({
 
     price: z.number()
         .min(0, 'Precio debe ser mayor o igual a 0')
-        .max(999999.99, 'Precio no puede exceder 999,999.99'),
+        .max(999999.99, 'Precio no puede exceder 999,999.99')
+        .optional()
+        .default(0),
 
     stock: z.number()
         .int('Stock debe ser un número entero')
         .min(0, 'Stock debe ser mayor o igual a 0')
-        .max(999999, 'Stock no puede exceder 999,999'),
+        .max(999999, 'Stock no puede exceder 999,999')
+        .optional()
+        .default(0),
 
     min_stock: z.number()
         .int('Stock mínimo debe ser un número entero')
@@ -36,7 +45,7 @@ const productBaseSchema = z.object({
 
     category_id: z.string()
         .uuid('ID de categoría inválido')
-        .optional(),
+        .min(1, 'La categoría es requerida'),
 
     image_url: z.string()
         .url('URL de imagen inválida')

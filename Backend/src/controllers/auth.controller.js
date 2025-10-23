@@ -283,7 +283,7 @@ class AuthController {
                             ruc: c.ruc
                         }))
                     },
-                    currentCompany: {
+                    company: {
                         id: selectedCompany.id,
                         name: selectedCompany.name,
                         role: selectedCompany.role

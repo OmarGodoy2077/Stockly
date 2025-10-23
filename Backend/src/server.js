@@ -80,6 +80,7 @@ class StocklyServer {
                 const allowedOrigins = [
                     process.env.CORS_ORIGIN || 'http://localhost:3000',
                     'http://localhost:3000',
+                    'http://localhost:5173',
                     'http://localhost:3001',
                     'https://stockly-frontend.vercel.app',
                     'https://stockly-production.web.app'

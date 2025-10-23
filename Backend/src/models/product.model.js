@@ -16,6 +16,7 @@ class ProductModel {
         categoryId,
         sku,
         name,
+        brand,
         description,
         price,
         stock,
@@ -25,34 +26,45 @@ class ProductModel {
         condition = 'new'
     }) {
         try {
-            const query = `
-                INSERT INTO products (
-                    company_id, category_id, sku, name, description,
-                    price, stock, min_stock, image_url, barcode, condition
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('products')
+                .insert({
+                    company_id: companyId,
+                    category_id: categoryId,
+                    sku,
+                    name,
+                    brand,
+                    description,
+                    price,
+                    stock,
+                    min_stock: minStock,
+                    image_url: imageUrl,
+                    barcode,
+                    condition
+                })
+                .select()
+                .single();
 
-            const result = await database.query(query, [
-                companyId, categoryId, sku, name, description,
-                price, stock, minStock, imageUrl, barcode, condition
-            ]);
+            if (error) {
+                logger.error('Supabase error creating product:', error);
+                if (error.code === '23505') { // Unique violation
+                    throw new Error('SKU already exists in this company');
+                }
+                throw error;
+            }
 
-            logger.business('product_created', 'product', result.rows[0].id, {
+            logger.business('product_created', 'product', data.id, {
                 companyId,
                 sku,
                 name,
+                brand,
                 stock,
                 condition
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error creating product:', error);
-            if (error.code === '23505') { // Unique violation
-                throw new Error('SKU already exists in this company');
-            }
             throw error;
         }
     }
@@ -65,40 +77,34 @@ class ProductModel {
      */
     static async findById(productId, companyId) {
         try {
-            const query = `
-                SELECT
-                    p.*,
-                    c.name as category_name,
-                    COALESCE(SUM(sold.quantity), 0) as total_sold,
-                    COALESCE(SUM(purchased.quantity), 0) as total_purchased
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                LEFT JOIN (
-                    SELECT
-                        product_id,
-                        SUM(quantity) as quantity
-                    FROM (
-                        SELECT product_id, quantity FROM sales, jsonb_array_elements(products) as product
-                        UNION ALL
-                        SELECT product_id, quantity FROM purchases, jsonb_array_elements(products) as product
-                    ) combined
-                    GROUP BY product_id
-                ) sold ON p.id = sold.product_id
-                WHERE p.id = $1 AND p.company_id = $2
-            `;
+            const { data, error } = await database.supabase
+                .from('products')
+                .select(`
+                    *,
+                    category:categories(id, name)
+                `)
+                .eq('id', productId)
+                .eq('company_id', companyId)
+                .single();
 
-            const result = await database.query(query, [productId, companyId]);
-
-            if (result.rows.length === 0) {
-                return null;
+            if (error) {
+                if (error.code === 'PGRST116') { // Not found
+                    return null;
+                }
+                logger.error('Supabase error finding product:', error);
+                throw error;
             }
 
-            const product = result.rows[0];
+            // Calculate stock status
+            const stockStatus = this.calculateStockStatus(data.stock, data.min_stock);
 
-            // Parse JSON products data if needed for additional details
             return {
-                ...product,
-                stock_status: this.getStockStatus(product.stock, product.min_stock)
+                ...data,
+                category_name: data.category?.name || null,
+                stock_status: stockStatus,
+                total_sold: 0, // TODO: Calculate from sales
+                total_purchased: 0, // TODO: Calculate from purchases
+                category: undefined
             };
         } catch (error) {
             logger.error('Error finding product by ID:', error);
@@ -124,75 +130,74 @@ class ProductModel {
         try {
             const offset = (page - 1) * limit;
 
-            // Build WHERE conditions
-            const conditions = ['p.company_id = $1'];
-            const params = [companyId];
-            let paramCount = 2;
+            // Build query using Supabase
+            let query = database.supabase
+                .from('products')
+                .select(`
+                    *,
+                    category:categories(id, name)
+                `, { count: 'exact' })
+                .eq('company_id', companyId);
 
+            // Apply filters
             if (categoryId) {
-                conditions.push(`p.category_id = $${paramCount}`);
-                params.push(categoryId);
-                paramCount++;
+                query = query.eq('category_id', categoryId);
             }
 
             if (search) {
-                conditions.push(`(p.name ILIKE $${paramCount} OR p.sku ILIKE $${paramCount} OR p.description ILIKE $${paramCount})`);
-                params.push(`%${search}%`);
-                paramCount++;
+                query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
             }
 
             if (stockStatus) {
                 switch (stockStatus) {
                     case 'low':
-                        conditions.push(`p.stock <= p.min_stock`);
+                        // Stock <= min_stock (requires custom filter)
+                        query = query.filter('stock', 'lte', database.supabase.rpc('get_column', { col: 'min_stock' }));
                         break;
                     case 'out':
-                        conditions.push(`p.stock = 0`);
+                        query = query.eq('stock', 0);
                         break;
                     case 'available':
-                        conditions.push(`p.stock > 0`);
+                        query = query.gt('stock', 0);
                         break;
                 }
             }
 
-            const whereClause = conditions.join(' AND ');
-
-            // Build ORDER BY clause
+            // Apply sorting
             const validSortFields = ['name', 'sku', 'price', 'stock', 'created_at'];
             const sortField = validSortFields.includes(sortBy) ? sortBy : 'name';
-            const order = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+            const ascending = sortOrder.toUpperCase() !== 'DESC';
 
-            // Main query for products
-            const query = `
-                SELECT
-                    p.*,
-                    c.name as category_name,
-                    ${this.getStockStatusExpression('p.stock', 'p.min_stock')} as stock_status
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                WHERE ${whereClause}
-                ORDER BY p.${sortField} ${order}
-                LIMIT $${paramCount} OFFSET $${paramCount + 1}
-            `;
+            query = query.order(sortField, { ascending });
 
-            // Count query for pagination
-            const countQuery = `
-                SELECT COUNT(*) as total
-                FROM products p
-                WHERE ${whereClause}
-            `;
+            // Apply pagination
+            query = query.range(offset, offset + limit - 1);
 
-            // Execute queries
-            const [productsResult, countResult] = await Promise.all([
-                database.query(query, [...params, limit, offset]),
-                database.query(countQuery, params)
-            ]);
+            // Execute query
+            const { data, error, count } = await query;
 
-            const total = parseInt(countResult.rows[0].total);
+            if (error) {
+                logger.error('Supabase error getting products:', error);
+                throw error;
+            }
+
+            // Transform data to match expected format
+            const products = (data || []).map(product => {
+                const stockStatus = this.calculateStockStatus(product.stock, product.min_stock);
+                return {
+                    ...product,
+                    category_name: product.category?.name || null,
+                    stock_status: stockStatus,
+                    // Remove nested category object if you want flat structure
+                    category: undefined
+                };
+            });
+
+            const total = count || 0;
             const totalPages = Math.ceil(total / limit);
 
             return {
-                products: productsResult.rows,
+                products,
                 pagination: {
                     page,
                     limit,
@@ -209,6 +214,16 @@ class ProductModel {
     }
 
     /**
+     * Calculate stock status based on stock and min_stock
+     * @private
+     */
+    static calculateStockStatus(stock, minStock) {
+        if (stock === 0) return 'out';
+        if (stock <= minStock) return 'low';
+        return 'available';
+    }
+
+    /**
      * Update product stock
      * @param {string} productId - Product ID
      * @param {string} companyId - Company ID
@@ -218,47 +233,59 @@ class ProductModel {
      */
     static async updateStock(productId, companyId, newStock, operation = 'set') {
         try {
-            let stockValue;
+            // First, get the current product
+            const { data: currentProduct, error: fetchError } = await database.supabase
+                .from('products')
+                .select('stock')
+                .eq('id', productId)
+                .eq('company_id', companyId)
+                .single();
 
-            switch (operation) {
-                case 'add':
-                    stockValue = `stock + ${newStock}`;
-                    break;
-                case 'subtract':
-                    stockValue = `stock - ${newStock}`;
-                    break;
-                case 'set':
-                default:
-                    stockValue = newStock;
-                    break;
-            }
-
-            const query = `
-                UPDATE products
-                SET stock = ${stockValue}, updated_at = NOW()
-                WHERE id = $1 AND company_id = $2
-                RETURNING *
-            `;
-
-            const result = await database.query(query, [productId, companyId]);
-
-            if (result.rows.length === 0) {
+            if (fetchError || !currentProduct) {
                 throw new Error('Product not found');
             }
 
-            const product = result.rows[0];
+            let finalStock;
+            const oldStock = currentProduct.stock;
+
+            switch (operation) {
+                case 'add':
+                    finalStock = oldStock + newStock;
+                    break;
+                case 'subtract':
+                    finalStock = Math.max(0, oldStock - newStock);
+                    break;
+                case 'set':
+                default:
+                    finalStock = newStock;
+                    break;
+            }
+
+            // Update the stock
+            const { data, error } = await database.supabase
+                .from('products')
+                .update({ stock: finalStock, updated_at: new Date().toISOString() })
+                .eq('id', productId)
+                .eq('company_id', companyId)
+                .select()
+                .single();
+
+            if (error) {
+                logger.error('Supabase error updating stock:', error);
+                throw error;
+            }
 
             logger.business('stock_updated', 'product', productId, {
                 companyId,
-                oldStock: operation === 'set' ? 'unknown' : product.stock - (operation === 'add' ? newStock : -newStock),
-                newStock: product.stock,
+                oldStock,
+                newStock: data.stock,
                 operation,
                 quantity: newStock
             });
 
             return {
-                ...product,
-                stock_status: this.getStockStatus(product.stock, product.min_stock)
+                ...data,
+                stock_status: this.calculateStockStatus(data.stock, data.min_stock)
             };
         } catch (error) {
             logger.error('Error updating product stock:', error);
@@ -275,36 +302,38 @@ class ProductModel {
      */
     static async update(productId, companyId, updates) {
         try {
-            const allowedFields = ['category_id', 'sku', 'name', 'description', 'price', 'min_stock', 'image_url', 'barcode'];
-            const fields = [];
-            const values = [];
-            let paramCount = 1;
+            const allowedFields = ['category_id', 'sku', 'name', 'description', 'price', 'min_stock', 'image_url', 'barcode', 'condition'];
+            const updateData = {};
 
             Object.keys(updates).forEach(key => {
                 if (allowedFields.includes(key)) {
-                    fields.push(`${key} = $${paramCount}`);
-                    values.push(updates[key]);
-                    paramCount++;
+                    updateData[key] = updates[key];
                 }
             });
 
-            if (fields.length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 throw new Error('No valid fields to update');
             }
 
-            values.push(productId);
-            values.push(companyId);
+            updateData.updated_at = new Date().toISOString();
 
-            const query = `
-                UPDATE products
-                SET ${fields.join(', ')}, updated_at = NOW()
-                WHERE id = $${paramCount} AND company_id = $${paramCount + 1}
-                RETURNING *
-            `;
+            const { data, error } = await database.supabase
+                .from('products')
+                .update(updateData)
+                .eq('id', productId)
+                .eq('company_id', companyId)
+                .select()
+                .single();
 
-            const result = await database.query(query, values);
+            if (error) {
+                logger.error('Supabase error updating product:', error);
+                if (error.code === '23505') {
+                    throw new Error('SKU already exists in this company');
+                }
+                throw error;
+            }
 
-            if (result.rows.length === 0) {
+            if (!data) {
                 throw new Error('Product not found');
             }
 
@@ -313,12 +342,9 @@ class ProductModel {
                 updatedFields: Object.keys(updates)
             });
 
-            return result.rows[0];
+            return data;
         } catch (error) {
             logger.error('Error updating product:', error);
-            if (error.code === '23505') {
-                throw new Error('SKU already exists in this company');
-            }
             throw error;
         }
     }
@@ -331,15 +357,15 @@ class ProductModel {
      */
     static async delete(productId, companyId) {
         try {
-            const query = `
-                UPDATE products
-                SET is_active = false, updated_at = NOW()
-                WHERE id = $1 AND company_id = $2
-            `;
+            const { data, error } = await database.supabase
+                .from('products')
+                .update({ is_active: false, updated_at: new Date().toISOString() })
+                .eq('id', productId)
+                .eq('company_id', companyId)
+                .select()
+                .single();
 
-            const result = await database.query(query, [productId, companyId]);
-
-            if (result.rowCount === 0) {
+            if (error || !data) {
                 throw new Error('Product not found');
             }
 
@@ -361,25 +387,37 @@ class ProductModel {
      */
     static async getLowStockProducts(companyId) {
         try {
-            const query = `
-                SELECT
-                    p.*,
-                    c.name as category_name,
-                    (p.min_stock - p.stock) as deficit
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                WHERE p.company_id = $1
-                  AND p.is_active = true
-                  AND p.stock <= p.min_stock
-                ORDER BY (p.min_stock - p.stock) DESC, p.name ASC
-            `;
+            // Get products where stock <= min_stock using RPC or filter
+            // Note: Supabase doesn't support column-to-column comparison directly
+            // We need to fetch and filter or use RPC
+            const { data, error } = await database.supabase
+                .from('products')
+                .select(`
+                    *,
+                    category:categories(id, name)
+                `)
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .order('stock', { ascending: true });
 
-            const result = await database.query(query, [companyId]);
+            if (error) {
+                logger.error('Supabase error getting low stock products:', error);
+                throw error;
+            }
 
-            return result.rows.map(product => ({
-                ...product,
-                stock_status: 'low'
-            }));
+            // Filter products where stock <= min_stock
+            const lowStockProducts = (data || [])
+                .filter(p => p.stock <= p.min_stock)
+                .map(product => ({
+                    ...product,
+                    category_name: product.category?.name || null,
+                    deficit: product.min_stock - product.stock,
+                    stock_status: 'low',
+                    category: undefined
+                }))
+                .sort((a, b) => b.deficit - a.deficit || a.name.localeCompare(b.name));
+
+            return lowStockProducts;
         } catch (error) {
             logger.error('Error getting low stock products:', error);
             throw error;
@@ -393,21 +431,31 @@ class ProductModel {
      */
     static async getStatistics(companyId) {
         try {
-            const query = `
-                SELECT
-                    COUNT(*) as total_products,
-                    COUNT(CASE WHEN stock = 0 THEN 1 END) as out_of_stock,
-                    COUNT(CASE WHEN stock <= min_stock THEN 1 END) as low_stock,
-                    COUNT(CASE WHEN stock > min_stock THEN 1 END) as available,
-                    AVG(price) as average_price,
-                    SUM(stock) as total_stock_value
-                FROM products
-                WHERE company_id = $1 AND is_active = true
-            `;
+            const { data, error } = await database.supabase
+                .from('products')
+                .select('stock, min_stock, price')
+                .eq('company_id', companyId)
+                .eq('is_active', true);
 
-            const result = await database.query(query, [companyId]);
+            if (error) {
+                logger.error('Supabase error getting product statistics:', error);
+                throw error;
+            }
 
-            return result.rows[0];
+            const products = data || [];
+
+            const stats = {
+                total_products: products.length,
+                out_of_stock: products.filter(p => p.stock === 0).length,
+                low_stock: products.filter(p => p.stock > 0 && p.stock <= p.min_stock).length,
+                available: products.filter(p => p.stock > p.min_stock).length,
+                average_price: products.length > 0 
+                    ? products.reduce((sum, p) => sum + Number(p.price), 0) / products.length 
+                    : 0,
+                total_stock_value: products.reduce((sum, p) => sum + Number(p.stock), 0)
+            };
+
+            return stats;
         } catch (error) {
             logger.error('Error getting product statistics:', error);
             throw error;
@@ -415,31 +463,13 @@ class ProductModel {
     }
 
     /**
-     * Get stock status for a product
+     * Get stock status for a product (deprecated, use calculateStockStatus)
      * @param {number} stock - Current stock
      * @param {number} minStock - Minimum stock threshold
      * @returns {string} Stock status
      */
     static getStockStatus(stock, minStock) {
-        if (stock === 0) return 'out';
-        if (stock <= minStock) return 'low';
-        return 'available';
-    }
-
-    /**
-     * Get stock status SQL expression
-     * @param {string} stockField - Stock field name
-     * @param {string} minStockField - Min stock field name
-     * @returns {string} SQL expression for stock status
-     */
-    static getStockStatusExpression(stockField, minStockField) {
-        return `
-            CASE
-                WHEN ${stockField} = 0 THEN 'out'
-                WHEN ${stockField} <= ${minStockField} THEN 'low'
-                ELSE 'available'
-            END
-        `;
+        return this.calculateStockStatus(stock, minStock);
     }
 }
 
