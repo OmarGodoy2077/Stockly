@@ -19,17 +19,7 @@ RUN npm run build
 FROM nginx:alpine
 
 # Copy nginx config
-RUN mkdir -p /etc/nginx/conf.d
-COPY <<EOF /etc/nginx/conf.d/default.conf
-server {
-    listen 3000;
-    location / {
-        root /usr/share/nginx/html;
-        index index.html;
-        try_files \$uri \$uri/ /index.html;
-    }
-}
-EOF
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copy built files from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
