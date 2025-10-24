@@ -89,6 +89,7 @@ class StocklyServer {
                     // Railway production
                     'https://stockly-frontend-prod.railway.app',
                     'https://stockly-backend.railway.app',
+                    'https://accomplished-miracle-production.up.railway.app',
                     // Vercel (if deployed there)
                     'https://stockly-frontend.vercel.app',
                     // Firebase (if deployed there)
