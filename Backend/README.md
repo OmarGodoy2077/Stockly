@@ -1,6 +1,6 @@
 # 📚 Stockly Backend v1.3.0
 
-**Última Actualización:** 22 de Octubre, 2025  
+**Última Actualización:** 23 de Octubre, 2025  
 **Estado:** ✅ Listo para Producción  
 **Node.js:** 20+ | **Express:** 4.19+ | **PostgreSQL:** 14+ (Supabase)
 
@@ -8,9 +8,11 @@
 
 ## 🎯 Descripción del Proyecto
 
-Stockly es un **SaaS multi-tenant** para gestión integral de inventario, ventas, recibos y servicio técnico. Diseñado para emprendedores en LATAM.
+Stockly es un **SaaS multi-tenant** completo para gestión integral de inventario, ventas, invoices, garantías y servicio técnico. Diseñado para PYMES en LATAM.
 
-**Características:** ✅ Multi-tenant | ✅ Categorías jerárquicas | ✅ Atributos dinámicos | ✅ OCR para seriales | ✅ Invoices PDF | ✅ Profit tracking | ✅ Garantías
+**Stack Completo:** ✅ Node.js + Express | ✅ PostgreSQL + Supabase | ✅ JWT Auth | ✅ OCR + Tesseract | ✅ PDF con jsPDF | ✅ Cloudinary | ✅ Winston Logger
+
+**Características Principales:** ✅ Multi-tenant | ✅ Categorías jerárquicas | ✅ Atributos dinámicos | ✅ OCR para seriales | ✅ Invoices PDF profesionales | ✅ Profit tracking | ✅ Garantías con servicio técnico | ✅ RBAC (4 roles) | ✅ Reportes completos
 
 ---
 
@@ -53,55 +55,96 @@ Para **desarrolladores frontend y especialistas UML**, aquí está todo lo neces
 
 ## 🌟 Características v1.3.0
 
-### ⭐ Invoices/Recibos (NUEVO)
-- ✅ Generación de PDFs profesionales con logo empresa
-- ✅ Numeración automática secuencial (INV-2025-00001)
+### ⭐ Invoices/Recibos - PDF Profesionales
+- ✅ Generación de PDFs profesionales con logo y datos empresa
+- ✅ Numeración automática secuencial por empresa (INV-YYYY-00001)
 - ✅ Items flexibles: productos, envío, comisiones, descuentos
-- ✅ Cálculo automático de impuestos (IVA 12%)
-- ✅ Almacenamiento en Cloudinary
+- ✅ Cálculo automático de impuestos (IVA configurable)
+- ✅ Almacenamiento en Cloudinary con URL pública
 - ✅ Estados: Draft → Pending → Paid/Cancelled
+- ✅ Endpoints para generar, actualizar, finalizar, descargar
 
-### Características Existentes
-- **Categorías jerárquicas** - N niveles de subcategorías  
-- **Atributos dinámicos** - Personalizados por producto  
-- **OCR para seriales** - Extracción automática Tesseract  
-- **Profit tracking** - Análisis de rentabilidad en compras  
-- **Sistema de garantías** - Automático desde ventas  
-- **Multi-tenant** - Aislamiento por empresa  
-- **RBAC** - 4 roles: owner, admin, seller, inventory  
+### 📦 Gestión de Inventario
+- **Categorías jerárquicas** - N niveles de subcategorías (sin límite)
+- **Productos CRUD completo** - Stock por estado (new, used, open_box)
+- **Atributos dinámicos** - Personalizables por producto (color, tamaño, etc)
+- **Stock consolidado** - Vista unificada de inventario
+
+### 💰 Ventas y Ganancias
+- **Ventas CRUD** - Con cliente, teléfono, email, fecha
+- **OCR integrado** - Extrae números de serie automáticamente
+- **Garantías automáticas** - Se crean al registrar venta
+- **Profit tracking automático** - Calcula margen y rentabilidad
+
+### 🛒 Compras y Proveedores
+- **Compras CRUD** - Con proveedor, factura, costos
+- **Profit por compra** - Ganancias potenciales por item
+- **Gestión de proveedores** - CRUD completo
+- **Análisis de rentabilidad** - Por compra y período
+
+### 🛡️ Garantías y Servicio Técnico
+- **Sistema de garantías** - Automático desde ventas
+- **Servicio técnico completo** - Registro de reparaciones
+- **Historial de servicios** - Seguimiento de intervenciones
+- **Expiración automática** - Control de fechas
+
+### 📊 Reportes Avanzados
+- **Costo vs Ingresos** - Análisis de ganancia por período
+- **Análisis de profit** - Detalle por compra y producto
+- **Estadísticas** - Ventas, compras, invoices
+- **Exportación** - Excel y PDF
+
+### 🔐 Multi-tenant y Seguridad
+- **Aislamiento por empresa** - Cada empresa ve solo sus datos
+- **RBAC (4 roles)** - owner, admin, seller, inventory
+- **JWT + Bcrypt** - Autenticación segura
+- **Rate limiting** - Protección contra abuso
+- **Validación Zod** - Esquemas de entrada  
 
 ---
 
-## 🔧 Stack Tecnológico
+## 🔧 Stack Tecnológico - Completo
 
-| Componente | Tecnología | 
-|------------|-----------|
-| Runtime | Node.js 20+ |
-| Framework | Express.js 4.19+ |
-| BD | PostgreSQL 14+ (Supabase) |
-| Auth | JWT + Bcrypt |
-| Validación | Zod 3+ |
-| Logging | Winston 3+ |
-| OCR | Tesseract.js 5+ |
-| PDF | jsPDF 3.0.3 + jsPDF-autoTable 5.0.2 |
-| Archivos | Cloudinary |
-| Rate Limit | express-rate-limit 7.4.1 |
+| Componente | Tecnología | Versión | Propósito |
+|------------|-----------|---------|----------|
+| Runtime | Node.js | 20+ | Motor de ejecución |
+| Framework | Express.js | 4.19+ | Servidor REST API |
+| Base de Datos | PostgreSQL | 14+ | RDBMS |
+| Hosting BD | Supabase | Cloud | PostgreSQL en nube |
+| Autenticación | JWT + Bcrypt | 9.0.2 | Seguridad |
+| Validación | Zod | 3.23.8 | Validar esquemas |
+| Logging | Winston | 3.15.0 | Logs estructurados |
+| OCR | Tesseract.js | 5.1.1 | Extracción de texto |
+| PDF Generation | jsPDF + autoTable | 3.0.3 | Invoices PDF |
+| Excel Export | ExcelJS | 4.4.0 | Reportes |
+| Almacenamiento | Cloudinary | API | CDN + archivos |
+| Rate Limiting | express-rate-limit | 7.4.1 | Protección |
+| HTTP Security | Helmet | 8.0.0 | Headers seguros |
+| CORS | cors | 2.8.5 | Control origen |
+| Imágenes | Sharp | 0.34.4 | Procesamiento |
+| Tareas | node-cron | 3.0.3 | Scheduling |
+| Multer | Multer | 2.0 RC4 | Upload archivos |
 
 ---
 
-## 📦 Módulos Completos
+## 📦 Módulos y Controladores Implementados
 
-| Módulo | Endpoints |
-|--------|-----------|
-| **Auth** | Register, Login, Refresh, Change Password |
-| **Usuarios** | Profile, Companies, Switch Company |
-| **Empresas** | CRUD, Miembros, Roles, Invitaciones |
-| **Productos** | CRUD, Stock Completo, Categorías, Atributos |
-| **Compras** | CRUD, Profit Automático, Estadísticas |
-| **Ventas** | CRUD, OCR, Garantías Automáticas |
-| **Invoices** | CRUD, PDF, Items Flexibles, Estadísticas |
-| **Garantías** | Automáticas desde Ventas, Servicio Técnico |
-| **Reportes** | Costo vs Ingreso, Estadísticas |
+| Módulo | Controller | Funcionalidades |
+|--------|-----------|-----------------|
+| **Autenticación** | AuthController | Register, Login, Refresh, Logout, ChangePassword |
+| **Usuarios** | UserController | Profile, Companies, Switch Company, Búsqueda |
+| **Empresas** | CompanyController | CRUD, Members, Roles, Logo, Datos fiscales |
+| **Invitaciones** | InvitationController | Crear, Validar, Aceptar código invitación |
+| **Categorías** | CategoryController | CRUD jerárquico, Árbol de categorías |
+| **Productos** | ProductController | CRUD, Stock, Búsqueda, Filtros |
+| **Atributos** | ProductAttributeController | Crear, Actualizar, Eliminar atributos |
+| **Compras** | PurchaseController | CRUD, Profit automático, Estadísticas |
+| **Ventas** | SaleController | CRUD, OCR, Garantías automáticas |
+| **Invoices** | InvoiceController | Crear, Generar PDF, Finalizar, Cambiar estado |
+| **Garantías** | WarrantyController | CRUD, Expiración, Búsqueda |
+| **Servicio Técnico** | ServiceHistoryController | Registro, Historial, Búsqueda |
+| **Proveedores** | SupplierController | CRUD, Búsqueda |
+| **Reportes** | ReportController | Costo vs Ingresos, Profit, Estadísticas |
 
 ---
 
@@ -137,17 +180,34 @@ POST   /invoices/:id/generate-pdf | PATCH /invoices/:id/finalize
 
 ---
 
-## 💾 Base de Datos
+## 💾 Base de Datos - Modelo Completo
 
-**18 tablas principales:**
-- users, companies, user_company (multi-tenant)
-- products, categories, product_attributes (inventario)
-- sales, invoices, invoice_line_items (ventas)
-- warranties, service_histories (garantías)
-- purchases (compras con profit tracking)
-- suppliers, invitations
+**18+ tablas principales:**
+- `users` - Autenticación y perfiles
+- `companies` - Datos de empresas multi-tenant
+- `user_company` - Relación users-companies (aislamiento)
+- `categories` - Jerárquicas con parent_id
+- `products` - Inventario completo
+- `product_attributes` - Atributos dinámicos
+- `product_stock` - Stock por estado (new, used, open_box)
+- `suppliers` - Proveedores
+- `purchases` - Compras con profit tracking
+- `purchase_items` - Items de compras
+- `sales` - Ventas de clientes
+- `sale_items` - Items de ventas con seriales OCR
+- `invoices` - Invoices/Recibos
+- `invoice_line_items` - Items de invoices
+- `warranties` - Garantías automáticas
+- `service_histories` - Historial de servicio técnico
+- `invitations` - Códigos de invitación
+- `refresh_tokens` - Tokens revocables
 
-**Vistas materializadas:**
+**Características:**
+- ✅ Row Level Security (RLS) - Aislamiento por empresa
+- ✅ Índices optimizados - En campos de búsqueda
+- ✅ Foreign Keys - Integridad referencial
+- ✅ Triggers - Auditoría automática
+- ✅ Vistas - Para reportes complejos
 - category_hierarchy, products_with_attributes
 - purchase_profit_analysis, monthly_purchase_profit_summary
 - invoices_with_details, invoice_line_items_detail

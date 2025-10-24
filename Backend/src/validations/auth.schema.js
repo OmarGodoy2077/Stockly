@@ -29,13 +29,14 @@ const phoneSchema = z.string()
     .optional();
 
 /**
- * Register schema - User registration with choice of company creation or invitation code
+ * Register schema - Flujo unificado
  * 
- * Flujo:
- * 1. Usuario proporciona datos personales (email, password, name, phone)
- * 2. Elige entre:
- *    a) Crear empresa: proporciona companyName, companyAddress, companyPhone
- *    b) Unirse a empresa: proporciona invitationCode
+ * IMPORTANTE: El usuario SIEMPRE debe crear empresa O unirse con código en el registro.
+ * NO hay usuarios sin empresa.
+ * 
+ * Dos flujos:
+ * 1. Crear usuario + empresa: email, password, name, phone, companyName (y opcionalmente RUC, address, etc)
+ * 2. Crear usuario + unirse: email, password, name, phone, invitationCode
  */
 const registerSchema = z.object({
     // User fields (required)
@@ -49,41 +50,44 @@ const registerSchema = z.object({
 
     // Invitation code (optional) - para unirse a empresa existente
     invitationCode: z.string()
-        .min(6, 'Invitation code must be at least 6 characters')
-        .max(12, 'Invitation code must not exceed 12 characters')
-        .toUpperCase()
+        .length(12, 'Invitation code must be exactly 12 characters')
+        .regex(/^[A-Z0-9]{12}$/, 'Invitation code must contain only uppercase letters and numbers')
         .optional(),
 
-    // Company fields (optional) - solo si NO hay invitationCode
+    // Company fields (optional) - para crear empresa
+    // Si NO hay invitationCode, SÍ se necesita companyName
     companyName: z.string()
         .min(2, 'Company name must be at least 2 characters')
         .max(255, 'Company name must not exceed 255 characters')
         .trim()
         .optional(),
     companyAddress: z.string()
-        .min(5, 'Company address must be at least 5 characters')
         .max(500, 'Company address must not exceed 500 characters')
         .trim()
         .optional(),
-    companyPhone: z.string()
-        .regex(/^\+?[0-9\s\-()]+$/, 'Invalid company phone format')
-        .min(8, 'Company phone must be at least 8 characters')
-        .optional(),
+    companyPhone: phoneSchema,
     companyEmail: emailSchema.optional(),
     companyWebsite: z.string()
         .url('Invalid website URL')
         .optional()
-}).refine(
+})
+// CRUCIAL: Validación de que tiene AMBAS opciones O una de ellas
+.refine(
     (data) => {
-        // Si hay invitationCode, NOT se necesitan campos de empresa
-        if (data.invitationCode) {
-            return !data.companyName && !data.companyAddress;
+        // Debe tener invitationCode O companyName (pero no ambos)
+        const hasInvitation = !!data.invitationCode;
+        const hasCompanyName = !!data.companyName;
+        
+        // Si tiene código: NO puede tener datos de empresa
+        if (hasInvitation) {
+            return !hasCompanyName && !data.companyAddress && !data.companyEmail && !data.companyWebsite;
         }
-        // Si NO hay invitationCode, SÍ se necesitan campos de empresa
-        return data.companyName && data.companyAddress && data.companyPhone;
+        
+        // Si NO tiene código: DEBE tener companyName
+        return hasCompanyName;
     },
     {
-        message: 'Either provide an invitation code or company details (name, address, phone)',
+        message: 'Must provide either invitation code OR company details (name required)',
         path: ['invitationCode']
     }
 );

@@ -1,16 +1,18 @@
 # 🎨 Stockly Frontend v1.3.0
 
-**Última Actualización:** 22 de Octubre, 2025  
+**Última Actualización:** 23 de Octubre, 2025  
 **Estado:** ✅ Listo para Producción  
-**React:** 18+ | **TypeScript:** 5.6+ | **Vite:** 5.4+ | **TailwindCSS:** 3.4+
+**React:** 19.1+ | **TypeScript:** 5.6+ | **Vite:** 5.4+ | **TailwindCSS:** 4.1+
 
 ---
 
 ## 🎯 Descripción del Proyecto
 
-Frontend para **Stockly**, sistema SaaS de gestión de inventario multi-tenant. Interfaz moderna y responsiva para:
+Frontend moderno para **Stockly**, SaaS multi-tenant completo de gestión de inventario, ventas, invoices y servicio técnico. Interfaz responsiva y optimizada.
 
-✅ Gestión de inventario | ✅ Ventas con OCR | ✅ Invoices/Recibos | ✅ Reportes | ✅ Garantías | ✅ Multi-empresa
+**Stack Frontend Completo:** ✅ React 19 + TypeScript | ✅ Vite 5.4 | ✅ TailwindCSS 4.1 | ✅ Axios | ✅ React Router v7 | ✅ Redux Toolkit | ✅ React Query | ✅ Zod Validation
+
+**Características:** ✅ Dashboard completo | ✅ Gestión inventario | ✅ Ventas con OCR | ✅ Invoices PDF | ✅ Reportes | ✅ Garantías | ✅ Multi-empresa
 
 ---
 
@@ -47,107 +49,203 @@ npm run dev
 
 ## 🌟 Características Implementadas v1.3.0
 
-### Dashboard & Autenticación ✅
-- Login/Registro con JWT
-- Cambio de contraseña
-- Gestión de múltiples empresas
-- Switch entre empresas
+### 🔐 Autenticación y Multi-empresa
+- ✅ **Registro e Login con JWT** - Seguridad nivel enterprise
+- ✅ **Multi-empresa** - Un usuario en múltiples empresas
+- ✅ **Switch de empresa** - Cambiar contexto al instante
+- ✅ **RBAC (4 roles)** - owner, admin, seller, inventory
+- ✅ **Gestión de usuarios** - Por empresa con invitaciones
+- ✅ **Cambio de contraseña** - Seguro y validado
 
-### Inventario ✅
-- Categorías jerárquicas (N niveles)
-- Productos CRUD
-- Atributos dinámicos por producto
-- Estados: new, used, open_box
-- Stock completo consolidado
+### 📦 Gestión de Inventario
+- ✅ **Categorías jerárquicas** - N niveles sin límite
+- ✅ **Productos CRUD** - Con precios compra/venta
+- ✅ **Atributos dinámicos** - Personalizables por producto
+- ✅ **Stock por estado** - new, used, open_box
+- ✅ **Búsqueda avanzada** - Por nombre, SKU, categoría
+- ✅ **Stock consolidado** - Vista total por producto
 
-### Ventas ✅
-- CRUD de ventas
-- **OCR integrado** - Extrae números de serie automáticamente
-- Garantías automáticas
-- Estadísticas de ventas
+### 💰 Ventas Completas
+- ✅ **CRUD de Ventas** - Cliente, teléfono, email, fecha
+- ✅ **OCR integrado** - Extrae seriales de imágenes
+- ✅ **Garantías automáticas** - Se crean al vender
+- ✅ **Estadísticas** - Ventas por período, ticket promedio
+- ✅ **Comprobantes** - Descarga de PDFs
+- ✅ **Historial** - Búsqueda por cliente, fecha
 
-### Compras ✅
-- CRUD de compras
-- **Profit tracking automático** - Calcula margen y rentabilidad
-- Análisis de ganancias
-- Estadísticas
+### 🛒 Compras y Proveedores
+- ✅ **Compras CRUD** - Proveedor, factura, costos
+- ✅ **Profit automático** - Calcula margen por item
+- ✅ **Proveedores** - CRUD con contacto
+- ✅ **Análisis rentabilidad** - Margen por producto
+- ✅ **Estadísticas** - Gasto por período
+- ✅ **Historial** - Por proveedor y fecha
 
-### **Invoices/Recibos v1.3.0** ⭐ NUEVO
-- Generación de invoices desde ventas
-- **Numeración automática** - INV-YYYY-00001
-- Items adicionales flexibles (envío, comisiones, descuentos)
-- **Generación de PDF** - Profesional con logo empresa
-- Almacenamiento en Cloudinary
-- Estados: Draft → Pending → Paid/Cancelled
-- Descargar PDF
+### 📄 Invoices/Recibos - Profesionales
+- ✅ **Creación flexible** - Desde venta o manual
+- ✅ **Numeración automática** - INV-YYYY-00001 por empresa
+- ✅ **Items flexibles** - Productos, envío, comisiones, descuentos
+- ✅ **PDF profesional** - Con logo y datos empresa
+- ✅ **Estados** - Draft, Pending, Paid, Cancelled
+- ✅ **Descarga PDF** - Almacenado en Cloudinary
+- ✅ **Compartir** - Link público de invoice
+- ✅ **Estadísticas** - Por mes, estado, cliente
 
-### Garantías ✅
-- Automáticas desde ventas
-- Seguimiento de expiración
-- Historial de servicio técnico
+### 🛡️ Garantías y Servicio
+- ✅ **Automáticas desde ventas** - Se crean al registrar venta
+- ✅ **Seguimiento expiración** - Días restantes visible
+- ✅ **Historial de servicio** - Reparaciones, técnico, fecha
+- ✅ **Estados** - Activa, Vencida, Reclamada
+- ✅ **Búsqueda** - Por cliente, producto, estado
+- ✅ **Notificaciones** - 7 días antes de vencer
 
-### Reportes ✅
-- Costo vs Ingresos (resumen ejecutivo)
-- Análisis de profit por compra
-- Estadísticas de ventas
-- Estadísticas de invoices
+### 📊 Reportes Avanzados
+- ✅ **Costo vs Ingresos** - Gráficos y tablas por período
+- ✅ **Análisis de profit** - Detalle por compra y producto
+- ✅ **Ventas por período** - Cantidad y monto
+- ✅ **Invoices summary** - Total generado, cobrado
+- ✅ **Exportación** - CSV y PDF
+- ✅ **Gráficos interactivos** - Recharts
 
-### Configuración ✅
-- Gestión de usuarios por empresa
-- Roles: owner, admin, seller, inventory
-- Invitaciones por código
-- Cambio de roles
-
----
-
-## 🔧 Stack Tecnológico
-
-| Componente | Tecnología | Versión |
-|-----------|-----------|---------|
-| Framework | React | 18+ |
-| Lenguaje | TypeScript | 5.6+ |
-| Build | Vite | 5.4+ |
-| Styling | TailwindCSS | 3.4+ |
-| HTTP Client | Axios | Latest |
-| State Management | Context API / Zustand | - |
-| Routing | React Router | v6+ |
-| UI Components | Componentes propios + TailwindCSS | - |
-| Icons | Lucide React o Similar | - |
-| Validation | Zod | 3+ |
-| PDF Download | html2canvas + jsPDF | - |
+### ⚙️ Configuración Completa
+- ✅ **Perfil de usuario** - Nombre, teléfono, foto
+- ✅ **Datos de empresa** - Logo, teléfono, dirección, RUT
+- ✅ **Gestión de usuarios** - Crear, editar, eliminar, roles
+- ✅ **Invitaciones** - Código único por usuario
+- ✅ **Roles** - Asignar y cambiar permisos
+- ✅ **Seguridad** - Cambiar contraseña
 
 ---
 
-## 📁 Estructura de Carpetas
+## 🔧 Stack Tecnológico - Completo
+
+| Componente | Tecnología | Versión | Propósito |
+|-----------|-----------|---------|----------|
+| Framework | React | 19.1.1 | UI Components |
+| Lenguaje | TypeScript | 5.6+ | Type Safety |
+| Build Tool | Vite | 5.4+ | Build rápido |
+| Styling | TailwindCSS | 4.1.15 | Utilidad CSS |
+| Forms | React Hook Form | 7.65+ | Form management |
+| Validation | Zod | 4.1.12 | Schema validation |
+| HTTP Client | Axios | 1.12.2 | Llamadas API |
+| Routing | React Router | v7.9.4 | Navegación |
+| State | Redux Toolkit | 2.9.1 | Estado global |
+| Query | React Query | 5.90.5 | Data fetching |
+| Icons | Lucide React | 0.546 | Iconografía |
+| Notifications | React Hot Toast | 2.6.0 | Notificaciones |
+| Charts | Recharts | 3.3.0 | Gráficos datos |
+| PDF | react-pdf | 10.2.0 | Lectura PDFs |
+| OCR | Tesseract.js | 6.0.1 | Lectura de texto |
+| Webcam | react-webcam | 7.2.0 | Acceso cámara |
+| Animations | Framer Motion | 12.23.24 | Animaciones |
+| Drag & Drop | React Dropzone | 14.3.8 | File upload |
+| UI Icons | React Icons | 5.5.0 | Iconografía |
+| Formatos | Autoprefixer | 10.4.21 | CSS compatibility |
+| CSS | PostCSS | 8.5.6 | CSS processing |
+
+---
+
+## 📁 Estructura de Carpetas Actual
 
 ```
-Frontend/
-├── src/
-│   ├── App.tsx                    # Componente raíz
-│   ├── main.tsx                   # Entrada
-│   ├── index.css                  # Estilos globales
-│   │
-│   ├── components/                # Componentes reutilizables
-│   │   ├── Header.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── Modal.tsx
-│   │   ├── Button.tsx
-│   │   ├── Form/
-│   │   └── [otros componentes]
-│   │
-│   ├── pages/                     # Páginas/Vistas
-│   │   ├── Dashboard.tsx
+Frontend/src/
+├── App.tsx                           # App raíz con rutas
+├── main.tsx                          # Entry point React
+├── App.css & index.css              # Estilos globales
+│
+├── pages/                           # Vistas/Páginas
+│   ├── Auth/
 │   │   ├── Login.tsx
-│   │   ├── Products.tsx
-│   │   ├── Sales.tsx
-│   │   ├── Invoices.tsx
-│   │   ├── Purchases.tsx
-│   │   ├── Reports.tsx
-│   │   ├── Settings.tsx
-│   │   └── [otras páginas]
-│   │
-│   ├── services/                  # Llamadas API
-│   │   ├── api.ts                 # Configuración Axios
+│   │   └── Register.tsx
+│   ├── Dashboard.tsx
+│   ├── Inventory/
+│   │   ├── ProductList.tsx
+│   │   ├── ProductDetail.tsx
+│   │   └── ProductAdd.tsx
+│   ├── Sales/
+│   │   ├── SalesList.tsx
+│   │   └── NewSale.tsx
+│   ├── Purchases/
+│   │   ├── PurchaseList.tsx
+│   │   └── NewPurchase.tsx
+│   ├── Invoices/
+│   │   ├── InvoiceList.tsx
+│   │   └── CreateInvoice.tsx
+│   ├── Services/
+│   │   └── ServiceBoard.tsx
+│   ├── Warranties/
+│   │   └── WarrantyList.tsx
+│   ├── Suppliers/
+│   │   └── SupplierList.tsx
+│   ├── Users/
+│   │   └── UserList.tsx
+│   ├── Invitations/
+│   │   └── InvitationList.tsx
+│   ├── LoginPage.tsx
+│   └── Settings/
+│       └── CompanySettings.tsx
+│
+├── components/                      # Componentes reutilizables
+│   ├── Header.tsx
+│   ├── Sidebar.tsx
+│   ├── ProtectedRoute.tsx
+│   ├── SerialNumberInput.tsx
+│   ├── OCRRegionSelector.tsx
+│   ├── ImageCropper.tsx
+│   └── index.ts
+│
+├── services/                        # API calls
+│   ├── api.ts                      # Axios config con interceptors
+│   ├── authService.ts
+│   ├── productService.ts
+│   ├── saleService.ts
+│   ├── purchaseService.ts
+│   ├── invoiceService.ts
+│   ├── reportService.ts
+│   ├── warrantyService.ts
+│   └── [otros servicios]
+│
+├── context/                         # Context API
+│   ├── ThemeContext.tsx
+│   ├── AuthContext.tsx
+│   └── CompanyContext.tsx
+│
+├── store/                           # Redux Toolkit
+│   ├── authSlice.ts
+│   ├── companySlice.ts
+│   └── index.ts
+│
+├── hooks/                           # Custom React Hooks
+│   ├── useAuth.ts
+│   ├── useApi.ts
+│   └── [otros hooks]
+│
+├── types/                           # Tipos TypeScript
+│   ├── index.ts
+│   ├── api.ts
+│   ├── models.ts
+│   └── [otros tipos]
+│
+├── utils/                           # Funciones utilidad
+│   ├── formatters.ts
+│   ├── validators.ts
+│   └── helpers.ts
+│
+├── layouts/                         # Layouts
+│   ├── AuthenticatedLayout.tsx
+│   ├── GuestLayout.tsx
+│   └── MainLayout.tsx
+│
+├── config/                          # Configuraciones
+│   ├── api.config.ts
+│   ├── routes.config.ts
+│   └── constants.ts
+│
+└── assets/                          # Recursos estáticos
+    ├── images/
+    ├── icons/
+    └── [otros]
+```
 │   │   ├── auth.service.ts
 │   │   ├── product.service.ts
 │   │   ├── sale.service.ts

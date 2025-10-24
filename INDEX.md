@@ -1,53 +1,63 @@
-# 📚 Stockly v1.3.0 - Documentación Completa
+# 📚 Stockly v1.3.0 - Índice Completo
 
-**Versión:** 1.3.0 | **Última Actualización:** 22 de Octubre, 2025 | **Estado:** ✅ Producción
+**Versión:** 1.3.0 | **Última Actualización:** 23 de Octubre, 2025 | **Estado:** ✅ Producción | **Docs:** 100% ✅
 
 ---
 
 ## 🎯 Inicio Rápido - Elige tu rol
 
-### 👨‍💻 **Soy Desarrollador Frontend**
-1. Lee: [Frontend/README.md](Frontend/README.md) (5 min)
-2. Configura: [Frontend/SETUP.md](Frontend/SETUP.md) (10 min)
-3. Referencia: [Frontend/QUICK_REFERENCE.md](Frontend/QUICK_REFERENCE.md)
-4. API disponible: [Backend/docs/API_REFERENCE.md](Backend/docs/API_REFERENCE.md)
+### � **Soy Usuario Final**
+1. Lee: [MANUAL_DE_USUARIO_v1.3.0.md](MANUAL_DE_USUARIO_v1.3.0.md) ⭐ **NUEVO**
+   - Guía paso a paso completa
+   - Todas las características explicadas
+   - Preguntas frecuentes resueltas
+2. Accede: https://stockly.app
+3. Registra tu cuenta y ¡comienza!
 
-### 👨‍💼 **Soy Desarrollador Backend**
-1. Lee: [Backend/README.md](Backend/README.md) (5 min)
-2. Configura: [Backend/docs/SETUP.md](Backend/docs/SETUP.md) (15 min)
-3. Endpoints: [Backend/docs/API_REFERENCE.md](Backend/docs/API_REFERENCE.md)
-4. Arquitectura: [Backend/docs/ARCHITECTURE.md](Backend/docs/ARCHITECTURE.md)
+### 👨‍� **Soy Desarrollador**
+1. Lee: [MANUAL_TECNICO_v1.3.0.md](MANUAL_TECNICO_v1.3.0.md) ⭐ **NUEVO**
+   - Arquitectura completa
+   - 14 Controllers documentados
+   - Stack técnico con versions reales
+2. Configura: [Backend/docs/SETUP.md](Backend/docs/SETUP.md) + [Frontend/SETUP.md](Frontend/SETUP.md)
+3. Referencia: [Backend/docs/API_REFERENCE.md](Backend/docs/API_REFERENCE.md)
+4. Inicia: [QUICK_START.md](QUICK_START.md)
 
-### 📊 **Soy Analista / UML**
-1. Lee: [Backend/docs/UML_ANALYSIS.md](Backend/docs/UML_ANALYSIS.md)
-   - Diagramas ER, clases, secuencias
-   - Casos de uso, flujos
-   - Estados de transacciones
+### � **Soy DevOps / Despliegue**
+1. Lee: [Backend/docs/DEPLOYMENT_GUIDE.md](Backend/docs/DEPLOYMENT_GUIDE.md)
+2. Lee: [MANUAL_TECNICO_v1.3.0.md](MANUAL_TECNICO_v1.3.0.md) → Sección Despliegue
+3. Checklist pre-deploy: [Backend/docs/DEPLOYMENT_GUIDE.md](Backend/docs/DEPLOYMENT_GUIDE.md)
 
-### 🚀 **Voy a Desplegar a Producción**
-1. Backend: [Backend/docs/DEPLOYMENT_GUIDE.md](Backend/docs/DEPLOYMENT_GUIDE.md)
-2. Frontend: [Frontend/SETUP.md](Frontend/SETUP.md) (sección Deploy)
-3. Checklist pre-deploy
+### 📊 **Soy Analista / Architect**
+1. Lee: [Backend/docs/ARCHITECTURE.md](Backend/docs/ARCHITECTURE.md)
+2. Diagramas: [Backend/docs/UML_ANALYSIS.md](Backend/docs/UML_ANALYSIS.md)
+3. Diseño BD: [MANUAL_TECNICO_v1.3.0.md](MANUAL_TECNICO_v1.3.0.md) → Sección Database Design
 
-### 📖 **Quiero Ver Referencia Rápida**
-- Backend: [Backend/docs/QUICK_REFERENCE.md](Backend/docs/QUICK_REFERENCE.md)
-- Frontend: [Frontend/QUICK_REFERENCE.md](Frontend/QUICK_REFERENCE.md)
+### 📚 **Necesito Ver Todo**
+→ [DOCUMENTACION.md](DOCUMENTACION.md) - Índice completo y detallado
 
 ---
 
-## 📂 Estructura del Proyecto
+## 📂 Documentación Principal
 
-```
-Stockly/
-├── Backend/                          ← Node.js + Express
-│   ├── README.md                     ← Inicio rápido backend
-│   ├── docs/
-│   │   ├── SETUP.md                 ← Configuración completa
-│   │   ├── API_REFERENCE.md         ← Todos los endpoints
-│   │   ├── ARCHITECTURE.md          ← Stack técnico
-│   │   ├── DEPLOYMENT_GUIDE.md      ← Despliegue
-│   │   ├── UML_ANALYSIS.md          ← Diagramas UML
-│   │   └── QUICK_REFERENCE.md       ← Referencia rápida
+| Documento | Propósito | Para Quién | Tamaño |
+|-----------|----------|-----------|--------|
+| **[MANUAL_DE_USUARIO_v1.3.0.md](MANUAL_DE_USUARIO_v1.3.0.md)** ⭐ NUEVO | Guía completa uso | Usuarios finales | 600+ líneas |
+| **[MANUAL_TECNICO_v1.3.0.md](MANUAL_TECNICO_v1.3.0.md)** ⭐ NUEVO | Arquitectura + desarrollo | Developers | 800+ líneas |
+| [DOCUMENTACION.md](DOCUMENTACION.md) | Índice general | Todos | 400+ líneas |
+| [QUICK_START.md](QUICK_START.md) | Inicio rápido | Todos | 300+ líneas |
+| [Backend/README.md](Backend/README.md) | Overview backend | Equipo tech | 150 líneas |
+| [Frontend/README.md](Frontend/README.md) | Overview frontend | Equipo tech | 150 líneas |
+| [Backend/docs/API_REFERENCE.md](Backend/docs/API_REFERENCE.md) | Endpoints API | Developers | 500+ líneas |
+| [Backend/docs/SETUP.md](Backend/docs/SETUP.md) | Setup backend | Developers | 200+ líneas |
+| [Backend/docs/ARCHITECTURE.md](Backend/docs/ARCHITECTURE.md) | Arquitectura | Tech leads | 300+ líneas |
+| [Backend/docs/DEPLOYMENT_GUIDE.md](Backend/docs/DEPLOYMENT_GUIDE.md) | Despliegue | DevOps | 300+ líneas |
+| [Backend/docs/UML_ANALYSIS.md](Backend/docs/UML_ANALYSIS.md) | Diagramas UML | Analistas | 400+ líneas |
+| [Frontend/SETUP.md](Frontend/SETUP.md) | Setup frontend | Developers | 150+ líneas |
+
+---
+
+## 🎯 Flujos Recomendados
 │   ├── src/                          ← Código fuente
 │   │   ├── controllers/              ← Lógica de endpoints
 │   │   ├── models/                   ← Acceso a datos

@@ -113,22 +113,22 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   return (
     <aside
       ref={sidebar}
-      className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col overflow-hidden bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-lg duration-300 ease-in-out lg:static lg:translate-x-0 ${
+      className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col overflow-hidden bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shadow-md dark:shadow-lg duration-300 ease-in-out lg:static lg:translate-x-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
       {/* SIDEBAR HEADER */}
-      <div className="flex items-center justify-between gap-2 px-6 py-5.5 lg:py-6.5 border-b border-gray-200 dark:border-gray-800">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+      <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 sm:py-5.5 lg:py-6.5 border-b border-gray-200 dark:border-gray-700">
+        <Link to="/" className="flex items-center gap-2 min-w-0">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold text-sm">S</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Stockly</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">Stockly</h1>
         </Link>
 
         <button
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+          className="lg:hidden text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex-shrink-0"
         >
           <X size={20} />
         </button>
@@ -136,10 +136,10 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
       {/* SIDEBAR MENU */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800">
-        <nav className="py-4 px-3 space-y-6">
+        <nav className="py-4 px-2 sm:px-3 space-y-6">
           {navSections.map((section) => (
             <div key={section.title}>
-              <h3 className="mb-3 px-3 text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <h3 className="mb-3 px-2 sm:px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 {section.title}
               </h3>
 
@@ -157,14 +157,14 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
                             setSidebarOpen(false);
                           }
                         }}
-                        className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                        className={`group relative flex items-center gap-3 px-2 sm:px-3 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm ${
                           active
                             ? 'bg-blue-600 text-white shadow-lg'
-                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                         }`}
                       >
                         <Icon size={20} className="flex-shrink-0" />
-                        <span className="flex-1 text-sm">{item.label}</span>
+                        <span className="flex-1 truncate">{item.label}</span>
                         {active && (
                           <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-1 h-6 bg-white rounded-l-full" />
                         )}
@@ -179,11 +179,11 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       </div>
 
       {/* USER & LOGOUT */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-3 bg-gray-50 dark:bg-gray-800/50">
+      <div className="border-t border-gray-200 dark:border-gray-700 p-3 sm:p-4 space-y-3 bg-gray-50 dark:bg-gray-800/50">
         {user && (
           <div className="px-3 py-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.name}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-300 truncate">{user.email}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
           </div>
         )}
         <button

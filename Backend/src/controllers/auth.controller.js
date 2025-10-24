@@ -11,12 +11,15 @@ import { database } from '../config/database.js';
 class AuthController {
 
     /**
-     * Register new user with choice: create company or join with invitation
+     * Register new user 
      * POST /api/v1/auth/register
      * 
-     * Flujo:
-     * 1. Si invitationCode: validar y asignar a empresa existente
-     * 2. Si NO invitationCode: crear nueva empresa
+     * FLUJO UNITARIO (TODO en un paso):
+     * 1. Crear usuario (email, password, name, phone)
+     * 2. SIEMPRE una de estas opciones:
+     *    a) Si invitationCode: crear usuario + unirse a empresa
+     *    b) Si companyName: crear usuario + crear empresa
+     * 3. Usuario SIEMPRE tiene empresa al terminar
      */
     static async register(req, res) {
         try {
@@ -32,6 +35,14 @@ class AuthController {
                 companyEmail,
                 companyWebsite
             } = req.body;
+
+            // Validar que tiene invitationCode O companyName
+            if (!invitationCode && !companyName) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Must provide either invitation code or company name'
+                });
+            }
 
             // Check if email already exists
             const existingUser = await UserModel.findByEmail(email);
@@ -55,16 +66,15 @@ class AuthController {
             });
 
             let company;
-            let role = 'owner'; // Default role
+            let role = 'owner';
             let invitationUsed = null;
 
             try {
                 if (invitationCode) {
-                    // Validar código de invitación
+                    // Flujo A: Usuario se une con código de invitación
                     const invitation = await InvitationModel.validate(invitationCode);
                     
                     if (!invitation) {
-                        // Eliminar usuario creado
                         throw new Error('Invalid or expired invitation code');
                     }
 
@@ -85,13 +95,17 @@ class AuthController {
                     role = invitation.role;
                     invitationUsed = invitationCode;
 
+                    // Link user to company
+                    await CompanyModel.addUser(company.id, user.id, role, user.id, invitationUsed);
+
                     logger.business('user_registered_via_invitation', 'user', user.id, {
                         email,
                         companyId: company.id,
                         invitationCode
                     });
-                } else {
-                    // Crear nueva empresa
+                    
+                } else if (companyName) {
+                    // Flujo B: Usuario crea empresa en el registro
                     company = await CompanyModel.create({
                         name: companyName,
                         address: companyAddress,
@@ -102,6 +116,9 @@ class AuthController {
 
                     role = 'owner';
 
+                    // Link user to company
+                    await CompanyModel.addUser(company.id, user.id, role, user.id);
+
                     logger.business('user_registered_with_company', 'user', user.id, {
                         email,
                         companyId: company.id,
@@ -109,10 +126,7 @@ class AuthController {
                     });
                 }
 
-                // Link user to company with appropriate role
-                await CompanyModel.addUser(company.id, user.id, role, user.id, invitationUsed);
-
-                // Generate tokens
+                // SIEMPRE generar tokens CON empresa (nunca sin)
                 const accessToken = jwtConfig.generateAccessToken({
                     user_id: user.id,
                     email: user.email,
@@ -170,6 +184,9 @@ class AuthController {
     /**
      * Login user
      * POST /api/v1/auth/login
+     * 
+     * IMPORTANTE: Usuario SIEMPRE tiene empresa (creada en registro)
+     * Retorna empresa seleccionada
      */
     static async login(req, res) {
         try {
@@ -220,10 +237,15 @@ class AuthController {
             // Get user companies
             const companies = await UserModel.getUserCompanies(user.id);
 
-            if (companies.length === 0) {
-                return res.status(403).json({
+            // Usuario DEBE tener al menos una empresa
+            if (!companies || companies.length === 0) {
+                logger.error('User with no companies at login', {
+                    userId: user.id,
+                    email
+                });
+                return res.status(400).json({
                     success: false,
-                    error: 'User is not associated with any company'
+                    error: 'User has no associated company. Please register with a company or invitation code.'
                 });
             }
 
@@ -241,7 +263,7 @@ class AuthController {
                 }
             }
 
-            // Generate tokens
+            // Generate tokens WITH company (always)
             const accessToken = jwtConfig.generateAccessToken({
                 user_id: user.id,
                 email: user.email,

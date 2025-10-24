@@ -1,4 +1,4 @@
-import { AxiosError } from 'axios';
+import { AxiosError, isAxiosError } from 'axios';
 import apiClient from './apiClient';
 import { config } from '../config/config';
 import { jwtDecode } from 'jwt-decode';
@@ -13,6 +13,13 @@ interface RegisterData {
   email: string;
   password: string;
   phone?: string;
+  invitationCode?: string;  // Para registro con invitación
+  companyName?: string;      // Para registro con creación de empresa
+  companyRuc?: string;       // RUC de la empresa (opcional, se auto-genera)
+  companyAddress?: string;
+  companyPhone?: string;
+  companyEmail?: string;
+  companyWebsite?: string;
 }
 
 interface UserResponse {
@@ -134,7 +141,7 @@ export const login = async (credentials: LoginCredentials): Promise<LoginRespons
       expiresIn: response.data.data?.expiresIn || response.data.expiresIn
     };
   } catch (error) {
-    if (error instanceof AxiosError) {
+    if (isAxiosError(error)) {
       throw handleAuthError(error);
     }
     throw error;
@@ -168,7 +175,7 @@ export const register = async (userData: RegisterData): Promise<LoginResponse> =
       expiresIn: response.data.data?.expiresIn || response.data.expiresIn
     };
   } catch (error) {
-    if (error instanceof AxiosError) {
+    if (isAxiosError(error)) {
       throw handleAuthError(error);
     }
     throw error;
@@ -204,7 +211,7 @@ export const refreshToken = async (): Promise<AuthResponse> => {
     };
   } catch (error) {
     clearTokens();
-    if (error instanceof AxiosError) {
+    if (isAxiosError(error)) {
       throw handleAuthError(error);
     }
     throw error;
@@ -225,11 +232,11 @@ export const joinCompany = async (invitationCode: string) => {
     const response = await apiClient.post('/auth/join', { code: invitationCode });
     return response.data;
   } catch (error) {
-    if (error instanceof AxiosError) {
-      if (error.response?.status === 404) {
+    if (isAxiosError(error)) {
+      if ((error as AxiosError).response?.status === 404) {
         throw new AuthError('INVALID_CODE', 'Invalid invitation code');
       }
-      throw handleAuthError(error);
+      throw handleAuthError(error as AxiosError);
     }
     throw error;
   }

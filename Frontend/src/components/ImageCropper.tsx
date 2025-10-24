@@ -62,10 +62,75 @@ export const ImageCropper = ({ imageUrl, onCrop, onCancel }: ImageCropperProps) 
     setDragStart({ x: coords.x, y: coords.y });
   };
 
+  const handleTouchStart = (e: React.TouchEvent, handle?: string) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const coords = getScaledCoordinates(touch.clientX, touch.clientY);
+    
+    if (handle) {
+      setIsResizing(handle);
+    } else {
+      setIsDragging(true);
+    }
+    
+    setDragStart({ x: coords.x, y: coords.y });
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!imgRef.current) return;
     
     const coords = getScaledCoordinates(e.clientX, e.clientY);
+    const deltaX = coords.x - dragStart.x;
+    const deltaY = coords.y - dragStart.y;
+    
+    if (isDragging && !isResizing) {
+      // Draw new selection
+      setCropArea({
+        x: Math.min(dragStart.x, coords.x),
+        y: Math.min(dragStart.y, coords.y),
+        width: Math.abs(coords.x - dragStart.x),
+        height: Math.abs(coords.y - dragStart.y),
+      });
+    } else if (isResizing) {
+      // Resize from handle
+      const newArea = { ...cropArea };
+      
+      switch (isResizing) {
+        case 'nw':
+          newArea.x = coords.x;
+          newArea.y = coords.y;
+          newArea.width = cropArea.width - deltaX;
+          newArea.height = cropArea.height - deltaY;
+          break;
+        case 'ne':
+          newArea.y = coords.y;
+          newArea.width = cropArea.width + deltaX;
+          newArea.height = cropArea.height - deltaY;
+          break;
+        case 'sw':
+          newArea.x = coords.x;
+          newArea.width = cropArea.width - deltaX;
+          newArea.height = cropArea.height + deltaY;
+          break;
+        case 'se':
+          newArea.width = cropArea.width + deltaX;
+          newArea.height = cropArea.height + deltaY;
+          break;
+      }
+      
+      // Ensure positive dimensions
+      if (newArea.width > 10 && newArea.height > 10) {
+        setCropArea(newArea);
+        setDragStart({ x: coords.x, y: coords.y });
+      }
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!imgRef.current) return;
+    
+    const touch = e.touches[0];
+    const coords = getScaledCoordinates(touch.clientX, touch.clientY);
     const deltaX = coords.x - dragStart.x;
     const deltaY = coords.y - dragStart.y;
     
@@ -247,6 +312,8 @@ export const ImageCropper = ({ imageUrl, onCrop, onCancel }: ImageCropperProps) 
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleMouseUp}
               style={{
                 transform: `scale(${zoom})`,
                 transformOrigin: 'center',
@@ -259,7 +326,8 @@ export const ImageCropper = ({ imageUrl, onCrop, onCancel }: ImageCropperProps) 
                 alt="Crop"
                 onLoad={() => setImageLoaded(true)}
                 onMouseDown={(e) => handleMouseDown(e)}
-                className="max-w-full h-auto cursor-crosshair select-none"
+                onTouchStart={(e) => handleTouchStart(e)}
+                className="max-w-full h-auto cursor-crosshair select-none touch-none"
                 style={{
                   transform: `rotate(${rotation}deg)`,
                   transition: 'transform 0.3s ease',
@@ -352,6 +420,10 @@ export const ImageCropper = ({ imageUrl, onCrop, onCancel }: ImageCropperProps) 
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           handleMouseDown(e as any, corner.handle);
+                        }}
+                        onTouchStart={(e) => {
+                          e.stopPropagation();
+                          handleTouchStart(e as any, corner.handle);
                         }}
                         style={{ cursor: corner.cursor }}
                       />

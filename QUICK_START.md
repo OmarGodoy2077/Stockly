@@ -1,4 +1,41 @@
-# 🚀 Guía Rápida de Ejecución - Stockly
+# 🚀 Guía Rápida de Ejecución - Stockly v1.3.0
+
+**¡Comienza aquí si recién instalaste el proyecto!**
+
+---
+
+## 📚 Documentación Disponible
+
+Antes de ejecutar, elige según tu rol:
+
+| Rol | Documento | Contenido |
+|-----|-----------|----------|
+| 👤 Usuario Final | `MANUAL_DE_USUARIO_v1.3.0.md` | Cómo usar la app |
+| 👨‍💻 Developer | `MANUAL_TECNICO_v1.3.0.md` | Setup + Desarrollo |
+| 🔧 DevOps | `Backend/docs/DEPLOYMENT_GUIDE.md` | Despliegue |
+| 📌 Índice General | `DOCUMENTACION.md` | Todas las guías |
+
+---
+
+## 🚀 Ejecución Rápida (2 minutos)
+
+### Opción 1: Dos Terminales Separadas ⭐ RECOMENDADO
+
+**Terminal 1 - Backend:**
+```powershell
+cd "w:\Proyectos FullStack\Stockly\Backend"
+npm run dev
+```
+✅ Servidor: `http://localhost:3001`
+
+**Terminal 2 - Frontend:**
+```powershell
+cd "w:\Proyectos FullStack\Stockly\Frontend"
+npm run dev
+```
+✅ App: `http://localhost:5173`
+
+---
 
 ## Comando Correcto del Backend
 

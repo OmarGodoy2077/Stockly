@@ -32,31 +32,31 @@ html.no-transitions * {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #f3f4f6;
   border-radius: 10px;
 }
 
 html.dark ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #1f2937;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #d1d5db;
   border-radius: 10px;
-  border: 2px solid #f1f5f9;
+  border: 2px solid #f3f4f6;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #9ca3af;
 }
 
 html.dark ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-color: #1e293b;
+  background: #4b5563;
+  border-color: #1f2937;
 }
 
 html.dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #6b7280;
 }
 
 /* Thin scrollbar utility */
@@ -178,10 +178,96 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   color: #888;
 }
 
-/* Responsive typography */
+/* Form elements - Better styling */
+.form-input,
+.form-select,
+.form-textarea {
+  background-color: #ffffff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+  border-color: #0284c7;
+}
+
+html.dark .form-input,
+html.dark .form-select,
+html.dark .form-textarea {
+  background-color: #1f2937;
+  color: #f9fafb;
+  border-color: #4b5563;
+}
+
+html.dark .form-input:focus,
+html.dark .form-select:focus,
+html.dark .form-textarea:focus {
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+  border-color: #38bdf8;
+}
+
+.form-input::placeholder,
+.form-select::placeholder,
+.form-textarea::placeholder {
+  color: #9ca3af;
+}
+
+html.dark .form-input::placeholder,
+html.dark .form-select::placeholder,
+html.dark .form-textarea::placeholder {
+  color: #6b7280;
+}
+
+.form-input:disabled,
+.form-select:disabled,
+.form-textarea:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+html.dark .form-input:disabled,
+html.dark .form-select:disabled,
+html.dark .form-textarea:disabled {
+  background-color: #111827;
+}
+
+/* Card and container styling */
+.card,
+.modal,
+.dialog {
+  background-color: #ffffff;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+}
+
+html.dark .card,
+html.dark .modal,
+html.dark .dialog {
+  background-color: #1f2937;
+  color: #f9fafb;
+  border-color: #374151;
+}
+
+/* Responsive utilities */
 @media (max-width: 640px) {
   body {
     font-size: 14px;
+  }
+  
+  h1 {
+    font-size: 1.5rem;
+  }
+  
+  h2 {
+    font-size: 1.25rem;
   }
 }
 
@@ -189,15 +275,45 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   body {
     font-size: 15px;
   }
+  
+  h1 {
+    font-size: 1.875rem;
+  }
 }
 
 /* Focus styles for accessibility */
 :focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid #0284c7;
   outline-offset: 2px;
 }
 
 html.dark :focus-visible {
-  outline: 2px solid #60a5fa;
+  outline: 2px solid #38bdf8;
+}
+
+/* Table styling for responsive */
+@media (max-width: 640px) {
+  table {
+    font-size: 0.875rem;
+  }
+  
+  th, td {
+    padding: 0.5rem 0.25rem;
+  }
+}
+
+/* Container padding responsive */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
 }
 

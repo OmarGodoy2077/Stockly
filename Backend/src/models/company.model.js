@@ -7,16 +7,32 @@ import { logger } from '../config/logger.js';
 class CompanyModel {
 
     /**
+     * Generate a temporary RUC (since it's required but user may not have it yet)
+     * Format: Temporary RUC based on timestamp and random
+     * @returns {string} Generated RUC
+     */
+    static generateTemporaryRUC() {
+        const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        return `TEMP${timestamp}${random}`; // e.g., TEMP1698123456789
+    }
+
+    /**
      * Create a new company
      * @param {Object} companyData - Company data
      * @returns {Promise<Object>} Created company
      */
-    static async create({ name, address, phone, email, website, logoUrl }) {
+    static async create({ name, ruc, address, phone, email, website, logoUrl }) {
         try {
+            // If RUC is not provided, generate a temporary one
+            // User can update it later
+            const finalRUC = ruc || this.generateTemporaryRUC();
+
             const { data, error } = await database.supabase
                 .from('companies')
                 .insert({
                     name,
+                    ruc: finalRUC,
                     address,
                     phone,
                     email,
@@ -27,11 +43,16 @@ class CompanyModel {
                 .single();
 
             if (error) {
+                if (error.code === '23505') { // Unique violation
+                    throw new Error(`RUC ${finalRUC} already exists`);
+                }
                 throw error;
             }
 
             logger.business('company_created', 'company', data.id, {
-                name
+                name,
+                ruc: finalRUC,
+                isTemporary: !ruc
             });
 
             return data;
