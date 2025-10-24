@@ -34,6 +34,9 @@ const joinCompanySchema = z.object({
   path: ['confirmPassword'],
 });
 
+type CreateCompanyFormData = z.infer<typeof createCompanySchema>;
+type JoinCompanyFormData = z.infer<typeof joinCompanySchema>;
+
 const Register = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -45,7 +48,7 @@ const Register = () => {
     handleSubmit: handleSubmitCreate,
     formState: { errors: createErrors },
     reset: resetCreate,
-  } = useForm({
+  } = useForm<CreateCompanyFormData>({
     resolver: zodResolver(createCompanySchema),
     mode: 'onBlur',
   });
@@ -55,12 +58,12 @@ const Register = () => {
     handleSubmit: handleSubmitJoin,
     formState: { errors: joinErrors },
     reset: resetJoin,
-  } = useForm({
+  } = useForm<JoinCompanyFormData>({
     resolver: zodResolver(joinCompanySchema),
     mode: 'onBlur',
   });
 
-  const handleCreateSubmit = async (data) => {
+  const handleCreateSubmit = async (data: CreateCompanyFormData) => {
     setIsLoading(true);
     try {
       const response = await register({
@@ -83,13 +86,14 @@ const Register = () => {
       navigate('/dashboard');
     } catch (error) {
       console.error('Error en registro:', error);
-      toast.error(error.message || 'Error al registrar');
+      const errorMessage = error instanceof Error ? error.message : 'Error al registrar';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleJoinSubmit = async (data) => {
+  const handleJoinSubmit = async (data: JoinCompanyFormData) => {
     setIsLoading(true);
     try {
       const response = await register({
@@ -110,7 +114,8 @@ const Register = () => {
       navigate('/dashboard');
     } catch (error) {
       console.error('Error en unirse:', error);
-      toast.error(error.message || 'Error al unirse a la empresa');
+      const errorMessage = error instanceof Error ? error.message : 'Error al unirse a la empresa';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -152,30 +157,30 @@ const Register = () => {
           <form className="mt-8 space-y-6" onSubmit={handleSubmitCreate(handleCreateSubmit)}>
             <div className="rounded-md shadow-sm -space-y-px">
               <input {...registerForm('name')} type="text" className={inputClass + ' rounded-t-md' + (createErrors.name ? ' ' + errorClass : '')} placeholder="Nombre completo" />
-              {createErrors.name && <p className="text-red-500 text-xs mt-1">{createErrors.name.message}</p>}
+              {createErrors.name?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.name.message)}</p>}
               
               <input {...registerForm('email')} type="email" className={inputClass + (createErrors.email ? ' ' + errorClass : '')} placeholder="Email" />
-              {createErrors.email && <p className="text-red-500 text-xs mt-1">{createErrors.email.message}</p>}
+              {createErrors.email?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.email.message)}</p>}
               
               <input {...registerForm('password')} type="password" className={inputClass + (createErrors.password ? ' ' + errorClass : '')} placeholder="Contraseña" />
-              {createErrors.password && <p className="text-red-500 text-xs mt-1">{createErrors.password.message}</p>}
+              {createErrors.password?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.password.message)}</p>}
               
               <input {...registerForm('confirmPassword')} type="password" className={inputClass + (createErrors.confirmPassword ? ' ' + errorClass : '')} placeholder="Confirmar contraseña" />
-              {createErrors.confirmPassword && <p className="text-red-500 text-xs mt-1">{createErrors.confirmPassword.message}</p>}
+              {createErrors.confirmPassword?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.confirmPassword.message)}</p>}
               
               <input {...registerForm('phone')} type="tel" className={inputClass + (createErrors.phone ? ' ' + errorClass : '')} placeholder="Teléfono (opcional)" />
-              {createErrors.phone && <p className="text-red-500 text-xs mt-1">{createErrors.phone.message}</p>}
+              {createErrors.phone?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.phone.message)}</p>}
               
               <div className="my-4 px-3 py-2 bg-gray-100 text-sm font-medium text-gray-700">Datos de la Empresa</div>
               
               <input {...registerForm('companyName')} type="text" className={inputClass + (createErrors.companyName ? ' ' + errorClass : '')} placeholder="Nombre de la empresa" />
-              {createErrors.companyName && <p className="text-red-500 text-xs mt-1">{createErrors.companyName.message}</p>}
+              {createErrors.companyName?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.companyName.message)}</p>}
               
               <input {...registerForm('companyRuc')} type="text" maxLength={11} className={inputClass + (createErrors.companyRuc ? ' ' + errorClass : '')} placeholder="RUC (opcional)" />
-              {createErrors.companyRuc && <p className="text-red-500 text-xs mt-1">{createErrors.companyRuc.message}</p>}
+              {createErrors.companyRuc?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.companyRuc.message)}</p>}
               
               <input {...registerForm('companyPhone')} type="tel" className={inputClass + ' rounded-b-md' + (createErrors.companyPhone ? ' ' + errorClass : '')} placeholder="Teléfono empresa (opcional)" />
-              {createErrors.companyPhone && <p className="text-red-500 text-xs mt-1">{createErrors.companyPhone.message}</p>}
+              {createErrors.companyPhone?.message && <p className="text-red-500 text-xs mt-1">{String(createErrors.companyPhone.message)}</p>}
             </div>
             <button type="submit" disabled={isLoading} className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
               {isLoading ? 'Registrando...' : 'Crear Cuenta y Empresa'}
@@ -187,22 +192,22 @@ const Register = () => {
           <form className="mt-8 space-y-6" onSubmit={handleSubmitJoin(handleJoinSubmit)}>
             <div className="rounded-md shadow-sm -space-y-px">
               <input {...joinForm('name')} type="text" className={inputClass + ' rounded-t-md' + (joinErrors.name ? ' ' + errorClass : '')} placeholder="Nombre completo" />
-              {joinErrors.name && <p className="text-red-500 text-xs mt-1">{joinErrors.name.message}</p>}
+              {joinErrors.name?.message && <p className="text-red-500 text-xs mt-1">{String(joinErrors.name.message)}</p>}
               
               <input {...joinForm('email')} type="email" className={inputClass + (joinErrors.email ? ' ' + errorClass : '')} placeholder="Email" />
-              {joinErrors.email && <p className="text-red-500 text-xs mt-1">{joinErrors.email.message}</p>}
+              {joinErrors.email?.message && <p className="text-red-500 text-xs mt-1">{String(joinErrors.email.message)}</p>}
               
               <input {...joinForm('password')} type="password" className={inputClass + (joinErrors.password ? ' ' + errorClass : '')} placeholder="Contraseña" />
-              {joinErrors.password && <p className="text-red-500 text-xs mt-1">{joinErrors.password.message}</p>}
+              {joinErrors.password?.message && <p className="text-red-500 text-xs mt-1">{String(joinErrors.password.message)}</p>}
               
               <input {...joinForm('confirmPassword')} type="password" className={inputClass + (joinErrors.confirmPassword ? ' ' + errorClass : '')} placeholder="Confirmar contraseña" />
-              {joinErrors.confirmPassword && <p className="text-red-500 text-xs mt-1">{joinErrors.confirmPassword.message}</p>}
+              {joinErrors.confirmPassword?.message && <p className="text-red-500 text-xs mt-1">{String(joinErrors.confirmPassword.message)}</p>}
               
               <input {...joinForm('phone')} type="tel" className={inputClass + (joinErrors.phone ? ' ' + errorClass : '')} placeholder="Teléfono (opcional)" />
-              {joinErrors.phone && <p className="text-red-500 text-xs mt-1">{joinErrors.phone.message}</p>}
+              {joinErrors.phone?.message && <p className="text-red-500 text-xs mt-1">{String(joinErrors.phone.message)}</p>}
               
               <input {...joinForm('invitationCode')} type="text" maxLength={12} className={inputClass + ' rounded-b-md' + (joinErrors.invitationCode ? ' ' + errorClass : '')} placeholder="Código de invitación (12 caracteres)" />
-              {joinErrors.invitationCode && <p className="text-red-500 text-xs mt-1">{joinErrors.invitationCode.message}</p>}
+              {joinErrors.invitationCode?.message && <p className="text-red-500 text-xs mt-1">{String(joinErrors.invitationCode.message)}</p>}
             </div>
             <button type="submit" disabled={isLoading} className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
               {isLoading ? 'Registrando...' : 'Crear Cuenta y Unirse'}
