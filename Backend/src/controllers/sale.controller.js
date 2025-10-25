@@ -3,6 +3,7 @@ import ProductModel from '../models/product.model.js';
 import OCRService from '../services/ocr.service.js';
 import CloudinaryStorageService from '../services/cloudinaryStorage.service.js';
 import { logger } from '../config/logger.js';
+import { database } from '../config/database.js';
 import ResponseHandler from '../utils/responseHandler.js';
 import pkg from 'jspdf';
 const { jsPDF } = pkg;
@@ -115,11 +116,41 @@ class SaleController {
                 return ResponseHandler.error(res, 'Customer name and products are required', 400);
             }
 
+            // 🔧 DEBUG LOGGING
+            logger.debug('Sale creation - Raw items received:', {
+                itemsCount: productsArray.length,
+                firstItem: productsArray[0],
+                allItems: productsArray
+            });
+
             // Calculate totals
             let subtotal = 0;
             let totalDiscounts = 0;
             const processedProducts = [];
 
+            // 🔧 OPTIMIZED: Obtener todos los nombres de productos en UN solo query
+            const productIds = productsArray.map(p => p.product_id);
+            const { data: productsFromDb } = await database.supabase
+                .from('products')
+                .select('id, name')
+                .eq('company_id', req.companyId)
+                .in('id', productIds);
+
+            // Crear mapa rápido de product_id -> product_name
+            const productNameMap = {};
+            if (productsFromDb) {
+                productsFromDb.forEach(p => {
+                    productNameMap[p.id] = p.name;
+                });
+            }
+
+            // 🔧 DEBUG: Log del mapa de productos
+            logger.debug('Product name map created:', {
+                totalProducts: Object.keys(productNameMap).length,
+                productNameMap
+            });
+
+            // 🔧 Enriquecer productos con nombres
             for (const product of productsArray) {
                 if (!product.product_id || !product.quantity || !product.unit_price) {
                     return ResponseHandler.error(res, 'Invalid product data', 400);
@@ -139,11 +170,19 @@ class SaleController {
 
                 processedProducts.push({
                     product_id: product.product_id,
+                    product_name: productNameMap[product.product_id] || 'Producto sin nombre', // ✅ NOMBRE DEL MAPA
                     quantity,
                     unit_price: unitPrice,
-                    discount: discount
+                    discount: discount,
+                    serial_number: product.serial_number || null // ✅ Serial puede ser null
                 });
             }
+
+            // 🔧 DEBUG: Log de productos enriquecidos
+            logger.debug('Processed products after enrichment:', {
+                totalProcessed: processedProducts.length,
+                products: processedProducts
+            });
 
             // Calculate totals (without taxes)
             // Formula: Total = Subtotal - Discounts

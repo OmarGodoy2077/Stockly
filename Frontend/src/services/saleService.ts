@@ -102,6 +102,9 @@ export class SaleService {
 
   static async createSale(data: CreateSaleData): Promise<Sale> {
     try {
+      // Extract serial_number from the first item if present
+      const serialNumber = data.items?.length > 0 ? data.items[0].serial_number : undefined;
+
       // Send as JSON, not FormData
       const payload = {
         customer_name: data.customer_name,
@@ -109,6 +112,7 @@ export class SaleService {
         customer_phone: data.customer_phone,
         customer_address: data.customer_address,
         items: data.items,
+        serial_number: serialNumber, // 🔧 FIXED: Extract serial_number from first item
         warranty_months: data.warranty_months,
         notes: data.notes,
         payment_method: data.payment_method,

@@ -11,6 +11,17 @@ router.use(setCompanyContext);
 
 /**
  * @swagger
+ * /api/v1/warranties/diagnostic:
+ *   get:
+ *     summary: Get warranty system diagnostic information
+ *     tags: [Warranties]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/diagnostic', checkResourcePermission('warranty', 'read'), WarrantyController.getDiagnostic);
+
+/**
+ * @swagger
  * /api/v1/warranties/statistics:
  *   get:
  *     summary: Get warranty statistics

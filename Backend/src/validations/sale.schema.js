@@ -58,6 +58,11 @@ const createSaleSchema = z.object({
         .optional()
         .default(0),
     serial_image: z.string()
+        .optional(),
+    serial_number: z.string()
+        .max(255, 'El número de serie no puede exceder 255 caracteres')
+        .optional(),
+    serial_image_url: z.string()
         .optional()
 });
 

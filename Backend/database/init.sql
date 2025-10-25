@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS warranties (
     start_date DATE NOT NULL,
     expires_at DATE NOT NULL,
     is_active BOOLEAN DEFAULT true,
+    invoice_number VARCHAR(50), -- 🔧 NUEVO: Número de factura/invoice
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -628,12 +629,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function to calculate warranty expiration date
-CREATE OR REPLACE FUNCTION calculate_warranty_expiry(months INTEGER, start_date DATE DEFAULT CURRENT_DATE)
+CREATE OR REPLACE FUNCTION calculate_warranty_expiry(months INTEGER, start_date DATE)
 RETURNS DATE AS $$
 BEGIN
-    RETURN start_date + INTERVAL '1 month' * months;
+    RETURN (start_date + (months || ' months')::INTERVAL)::DATE;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION calculate_warranty_expiry IS 
+'Calcula la fecha de expiración de garantía sumando meses a la fecha de inicio';
 
 -- Function to generate next invoice number (v1.3.0)
 CREATE OR REPLACE FUNCTION generate_invoice_number(p_company_id UUID)
@@ -958,6 +962,124 @@ CREATE POLICY "Only owners can update invitations" ON invitations
         )
     );
 
+
+-- Create trigger function for auto warranty creation
+CREATE OR REPLACE FUNCTION create_warranty_from_sale()
+RETURNS TRIGGER AS $$
+DECLARE
+    product_record JSONB;
+    product_name_value VARCHAR(255);
+    v_invoice_number VARCHAR;
+BEGIN
+    -- Solo crear garantía si:
+    -- 1. Se especificaron meses de garantía (> 0)
+    -- 2. Existe número de serie
+    IF NEW.warranty_months IS NOT NULL 
+       AND NEW.warranty_months > 0 
+       AND NEW.serial_number IS NOT NULL 
+       AND NEW.serial_number != '' THEN
+        
+        -- 🔧 Generar invoice_number usando la función
+        SELECT invoice_number INTO v_invoice_number
+        FROM generate_invoice_number(NEW.company_id)
+        LIMIT 1;
+        
+        -- Iterar sobre cada producto en el array de productos
+        FOR product_record IN SELECT * FROM jsonb_array_elements(NEW.products)
+        LOOP
+            -- Extraer nombre del producto (intentar diferentes nombres de campo)
+            product_name_value := COALESCE(
+                product_record->>'product_name',
+                product_record->>'name',
+                'Producto sin nombre'
+            );
+            
+            -- Insertar garantía para este producto
+            INSERT INTO warranties (
+                sale_id,
+                company_id,
+                serial_number,
+                product_name,
+                customer_name,
+                customer_email,
+                customer_phone,
+                warranty_months,
+                start_date,
+                expires_at,
+                is_active,
+                invoice_number
+            ) VALUES (
+                NEW.id,
+                NEW.company_id,
+                NEW.serial_number,
+                product_name_value,
+                NEW.customer_name,
+                NEW.customer_email,
+                NEW.customer_phone,
+                NEW.warranty_months,
+                NEW.sale_date::date,
+                calculate_warranty_expiry(NEW.warranty_months, NEW.sale_date::date),
+                TRUE,
+                v_invoice_number  -- ✅ USAR INVOICE_NUMBER GENERADO
+            );
+        END LOOP;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION create_warranty_from_sale IS 
+'Trigger que crea automáticamente registros de garantía cuando se inserta una venta con datos de garantía';
+
+-- Create trigger to auto-create warranty on sale
+DROP TRIGGER IF EXISTS tr_create_warranty_from_sale ON sales;
+CREATE TRIGGER tr_create_warranty_from_sale
+    AFTER INSERT ON sales
+    FOR EACH ROW
+    EXECUTE FUNCTION create_warranty_from_sale();
+
+COMMENT ON TRIGGER tr_create_warranty_from_sale ON sales IS 
+'Dispara la creación automática de garantías al insertar ventas';
+
+-- Create view for active warranties with remaining days
+CREATE OR REPLACE VIEW active_warranties_view AS
+SELECT 
+    w.*,
+    (w.expires_at - CURRENT_DATE) as days_remaining,
+    CASE 
+        WHEN w.expires_at < CURRENT_DATE THEN 'expired'::TEXT
+        WHEN (w.expires_at - CURRENT_DATE) <= 30 THEN 'expiring_soon'::TEXT
+        ELSE 'active'::TEXT
+    END as warranty_status,
+    (
+        SELECT COUNT(*)::INTEGER
+        FROM service_histories sh
+        WHERE sh.warranty_id = w.id
+    ) as service_count
+FROM warranties w
+WHERE w.is_active = true;
+
+COMMENT ON VIEW active_warranties_view IS 
+'Vista que muestra garantías activas con días restantes, estado y conteo de servicios';
+
+-- =====================================================
+-- INDEXES FOR PERFORMANCE
+-- =====================================================
+-- Índices para mejorar el rendimiento de consultas en garantías
+
+CREATE INDEX IF NOT EXISTS idx_warranties_company_id ON warranties(company_id);
+CREATE INDEX IF NOT EXISTS idx_warranties_serial_number ON warranties(serial_number);
+CREATE INDEX IF NOT EXISTS idx_warranties_expires_at ON warranties(expires_at);
+CREATE INDEX IF NOT EXISTS idx_warranties_is_active ON warranties(is_active);
+CREATE INDEX IF NOT EXISTS idx_warranties_sale_id ON warranties(sale_id);
+
+-- Índices para service_histories
+CREATE INDEX IF NOT EXISTS idx_service_histories_warranty_id ON service_histories(warranty_id);
+CREATE INDEX IF NOT EXISTS idx_service_histories_company_id ON service_histories(company_id);
+CREATE INDEX IF NOT EXISTS idx_service_histories_status ON service_histories(status);
+
+
 -- Add similar policies for other tables...
 
 -- =====================================================
@@ -980,6 +1102,11 @@ COMMENT ON COLUMN attribute_templates.name IS 'Attribute name that should be set
 COMMENT ON COLUMN attribute_templates.is_required IS 'Whether this attribute is mandatory for products in this category';
 COMMENT ON COLUMN categories.parent_id IS 'References parent category for hierarchical structure (NULL for root categories)';
 COMMENT ON COLUMN products.condition IS 'Product condition: new, used, or open_box';
+
+
+
+
+
 
 -- =====================================================
 -- SUCCESS MESSAGE

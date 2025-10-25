@@ -200,6 +200,51 @@ class WarrantyController {
             ResponseHandler.handleError(res, error, 'WarrantyController.getStatistics');
         }
     }
+
+    /**
+     * Diagnostic endpoint - Check warranty system status
+     * GET /api/v1/warranties/diagnostic
+     */
+    static async getDiagnostic(req, res) {
+        try {
+            const companyId = req.companyId;
+            
+            // Get warranties count
+            const allWarranties = await WarrantyModel.getByCompany({
+                companyId,
+                status: 'all',
+                page: 1,
+                limit: 1000
+            });
+
+            const totalWarranties = allWarranties.pagination.total;
+            const warrantiesList = allWarranties.warranties.map(w => ({
+                id: w.id,
+                serial_number: w.serial_number,
+                product_name: w.product_name,
+                customer_name: w.customer_name,
+                warranty_status: w.warranty_status,
+                days_remaining: w.days_remaining,
+                sale_products_count: w.sale_products?.length || 0,
+                sale_products: w.sale_products || []
+            }));
+
+            const diagnostic = {
+                timestamp: new Date().toISOString(),
+                company_id: companyId,
+                warranty_system: {
+                    total_warranties: totalWarranties,
+                    warranties: warrantiesList,
+                    sample_warranty: warrantiesList[0] || null
+                }
+            };
+
+            ResponseHandler.success(res, diagnostic);
+
+        } catch (error) {
+            ResponseHandler.handleError(res, error, 'WarrantyController.getDiagnostic');
+        }
+    }
 }
 
 export default WarrantyController;

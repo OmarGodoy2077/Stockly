@@ -74,22 +74,32 @@ class WarrantyModel {
 
             if (error || !warranty) return null;
 
-            // Calculate days remaining and status
-            const expiresAt = new Date(warranty.expires_at);
-            const now = new Date();
-            const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+            // Calculate days remaining and status using correct date format
+            const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const expiresAtDate = warranty.expires_at; // Already YYYY-MM-DD format
+            
+            // Convert to Date objects at midnight for accurate day calculation
+            const expiresAt = new Date(expiresAtDate + 'T00:00:00Z');
+            const today = new Date(todayDate + 'T00:00:00Z');
+            const daysRemaining = Math.ceil((expiresAt - today) / (1000 * 60 * 60 * 24));
 
             let warrantyStatus = 'active';
-            if (expiresAt < now) {
+            if (expiresAt < today) {
                 warrantyStatus = 'expired';
             } else if (daysRemaining <= 30) {
                 warrantyStatus = 'expiring_soon';
             }
 
+            // Parse sale_products from the JSONB products field
+            const saleProducts = warranty.sales?.products 
+                ? (Array.isArray(warranty.sales.products) ? warranty.sales.products : JSON.parse(warranty.sales.products || '[]'))
+                : [];
+
             return {
                 ...warranty,
                 sale_total: warranty.sales?.total_amount,
                 sale_date: warranty.sales?.sale_date,
+                sale_products: saleProducts,
                 days_remaining: daysRemaining,
                 warranty_status: warrantyStatus
             };
@@ -116,8 +126,11 @@ class WarrantyModel {
     }) {
         try {
             const offset = (page - 1) * limit;
-            const now = new Date().toISOString();
-            const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+            // Use DATE format for comparison since expires_at is a DATE column, not TIMESTAMP
+            const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+            const thirtyDaysLaterDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            logger.debug(`🔍 Warranty Query - Company: ${companyId}, Status: ${status}, Today: ${todayDate}`);
 
             // Build base query
             let query = database.supabase
@@ -125,14 +138,17 @@ class WarrantyModel {
                 .select('*, sales(*)', { count: 'exact' })
                 .eq('company_id', companyId);
 
-            // Apply status filter
+            // Apply status filter - compare dates correctly
             if (status === 'active') {
-                query = query.gte('expires_at', now).eq('is_active', true);
+                // Active: expiration date >= today AND is_active = true
+                query = query.gte('expires_at', todayDate).eq('is_active', true);
             } else if (status === 'expired') {
-                query = query.lt('expires_at', now);
+                // Expired: expiration date < today
+                query = query.lt('expires_at', todayDate);
             } else if (status === 'expiring_soon') {
-                query = query.gte('expires_at', now)
-                    .lte('expires_at', thirtyDaysLater)
+                // Expiring soon: expiration date >= today AND expiration date <= today + 30 days AND is_active = true
+                query = query.gte('expires_at', todayDate)
+                    .lte('expires_at', thirtyDaysLaterDate)
                     .eq('is_active', true);
             }
 
@@ -159,7 +175,7 @@ class WarrantyModel {
 
             if (error) throw error;
 
-            // Get service counts for each warranty
+            // Get service counts for each warranty and format products
             const warrantiesWithStats = await Promise.all(
                 (warranties || []).map(async (warranty) => {
                     const { count: serviceCount } = await database.supabase
@@ -167,21 +183,33 @@ class WarrantyModel {
                         .select('*', { count: 'exact', head: true })
                         .eq('warranty_id', warranty.id);
 
-                    const expiresAt = new Date(warranty.expires_at);
-                    const nowDate = new Date();
-                    const daysRemaining = Math.ceil((expiresAt - nowDate) / (1000 * 60 * 60 * 24));
+                    // Parse date correctly: expires_at is a DATE string (YYYY-MM-DD)
+                    // Calculate days remaining using date strings for accurate comparison
+                    const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+                    const expiresAtDate = warranty.expires_at; // Already YYYY-MM-DD format
+                    
+                    // Convert to Date objects at midnight for accurate day calculation
+                    const expiresAt = new Date(expiresAtDate + 'T00:00:00Z');
+                    const today = new Date(todayDate + 'T00:00:00Z');
+                    const daysRemaining = Math.ceil((expiresAt - today) / (1000 * 60 * 60 * 24));
 
                     let warrantyStatus = 'active';
-                    if (expiresAt < nowDate) {
+                    if (expiresAt < today) {
                         warrantyStatus = 'expired';
                     } else if (daysRemaining <= 30) {
                         warrantyStatus = 'expiring_soon';
                     }
 
+                    // Parse sale_products from the JSONB products field
+                    const saleProducts = warranty.sales?.products 
+                        ? (Array.isArray(warranty.sales.products) ? warranty.sales.products : JSON.parse(warranty.sales.products || '[]'))
+                        : [];
+
                     return {
                         ...warranty,
                         sale_total: warranty.sales?.total_amount,
                         sale_date: warranty.sales?.sale_date,
+                        sale_products: saleProducts,
                         days_remaining: daysRemaining,
                         warranty_status: warrantyStatus,
                         service_count: serviceCount || 0
@@ -191,6 +219,8 @@ class WarrantyModel {
 
             const total = count || 0;
             const totalPages = Math.ceil(total / limit);
+
+            logger.debug(`✅ Warranty Query Result - Total: ${total}, Returned: ${warrantiesWithStats.length}, Pages: ${totalPages}`);
 
             return {
                 warranties: warrantiesWithStats,
@@ -204,7 +234,7 @@ class WarrantyModel {
                 }
             };
         } catch (error) {
-            logger.error('Error getting warranties by company:', error);
+            logger.error('❌ Error getting warranties by company:', error);
             throw error;
         }
     }
@@ -229,22 +259,32 @@ class WarrantyModel {
 
             const warranty = warranties[0];
             
-            // Calculate days remaining and status
-            const expiresAt = new Date(warranty.expires_at);
-            const now = new Date();
-            const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+            // Calculate days remaining and status using correct date format
+            const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const expiresAtDate = warranty.expires_at; // Already YYYY-MM-DD format
+            
+            // Convert to Date objects at midnight for accurate day calculation
+            const expiresAt = new Date(expiresAtDate + 'T00:00:00Z');
+            const today = new Date(todayDate + 'T00:00:00Z');
+            const daysRemaining = Math.ceil((expiresAt - today) / (1000 * 60 * 60 * 24));
 
             let warrantyStatus = 'active';
-            if (expiresAt < now) {
+            if (expiresAt < today) {
                 warrantyStatus = 'expired';
             } else if (daysRemaining <= 30) {
                 warrantyStatus = 'expiring_soon';
             }
 
+            // Parse sale_products from the JSONB products field
+            const saleProducts = warranty.sales?.products 
+                ? (Array.isArray(warranty.sales.products) ? warranty.sales.products : JSON.parse(warranty.sales.products || '[]'))
+                : [];
+
             return {
                 ...warranty,
                 sale_total: warranty.sales?.total_amount,
                 sale_date: warranty.sales?.sale_date,
+                sale_products: saleProducts,
                 days_remaining: daysRemaining,
                 warranty_status: warrantyStatus
             };
@@ -337,24 +377,30 @@ class WarrantyModel {
      */
     static async getExpiring(companyId, daysThreshold = 30) {
         try {
-            const now = new Date().toISOString();
-            const threshold = new Date(Date.now() + daysThreshold * 24 * 60 * 60 * 1000).toISOString();
+            // Use DATE format for comparison
+            const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+            const thresholdDate = new Date(Date.now() + daysThreshold * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
             const { data, error } = await database.supabase
                 .from('warranties')
                 .select('*')
                 .eq('company_id', companyId)
                 .eq('is_active', true)
-                .gte('expires_at', now)
-                .lte('expires_at', threshold)
+                .gte('expires_at', todayDate)
+                .lte('expires_at', thresholdDate)
                 .order('expires_at', { ascending: true });
 
             if (error) throw error;
 
             return (data || []).map(warranty => {
-                const expiresAt = new Date(warranty.expires_at);
-                const nowDate = new Date();
-                const daysRemaining = Math.ceil((expiresAt - nowDate) / (1000 * 60 * 60 * 24));
+                // Parse date correctly using DATE format
+                const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+                const expiresAtDate = warranty.expires_at; // Already YYYY-MM-DD format
+                
+                // Convert to Date objects at midnight for accurate day calculation
+                const expiresAt = new Date(expiresAtDate + 'T00:00:00Z');
+                const today = new Date(todayDate + 'T00:00:00Z');
+                const daysRemaining = Math.ceil((expiresAt - today) / (1000 * 60 * 60 * 24));
                 
                 return {
                     ...warranty,
@@ -374,8 +420,9 @@ class WarrantyModel {
      */
     static async getStatistics(companyId) {
         try {
-            const now = new Date().toISOString();
-            const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+            // Use DATE format for comparison
+            const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+            const thirtyDaysLaterDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
             // Get all warranties for the company
             const { data: warranties, error } = await database.supabase
@@ -387,14 +434,14 @@ class WarrantyModel {
 
             const total = warranties ? warranties.length : 0;
             const active = warranties ? warranties.filter(w => 
-                new Date(w.expires_at) >= new Date() && w.is_active
+                w.expires_at >= todayDate && w.is_active
             ).length : 0;
             const expired = warranties ? warranties.filter(w => 
-                new Date(w.expires_at) < new Date()
+                w.expires_at < todayDate
             ).length : 0;
             const expiringSoon = warranties ? warranties.filter(w => 
-                new Date(w.expires_at) >= new Date() &&
-                new Date(w.expires_at) <= new Date(thirtyDaysLater) &&
+                w.expires_at >= todayDate &&
+                w.expires_at <= thirtyDaysLaterDate &&
                 w.is_active
             ).length : 0;
 
